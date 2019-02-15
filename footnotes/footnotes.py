@@ -74,6 +74,9 @@ class FootnoteList(object):
         self.footnotes = [Footnote(elem) for elem in self.root.findall('w:footnote', NS)]
         print("Found {} footnotes.".format(len(self.footnotes)))
 
+    def __iter__(self):
+        return iter(self.footnotes)
+
     @staticmethod
     def from_file(f):
         """Return a FootnoteList from filename or file object."""

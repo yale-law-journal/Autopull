@@ -49,17 +49,22 @@ class Paragraph(object):
                 addition = token.slice(self.text)
                 _, _, last_word = last.rpartition(' ')
                 paren_depth = last.count('(') - last.count(')')
+                bracket_depth = last.count('[') - last.count(']')
                 quote_depth = last.count('"') % 2
                 if (last_word in abbreviations
-                        or addition[0].isdigit()
+                        or not addition[0].isupper()
                         or paren_depth > 0
+                        or bracket_depth > 0
                         or quote_depth > 0):
                     compacted[-1].combine(token)
                 else:
                     compacted.append(token)
 
-        return [t.slice(self.text) for t in compacted]
+        return [Sentence(t.slice(self.text)) for t in compacted]
 
 class Sentence(object):
     def __init__(self, text):
         self.text = text
+
+    def __str__(self):
+        return self.text
