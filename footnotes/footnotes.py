@@ -18,9 +18,7 @@ class Run(object):
         assert element.tag == ns('w', 'r')
         self.element = element
 
-        props = self.element.findall('w:rPr', NS)
-        assert len(props) <= 1
-        self.props = props[0] if props else None
+        self.props = self.element.find('w:rPr', NS)
 
     def italics(self):
         """Is this text in italics?"""
