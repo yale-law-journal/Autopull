@@ -1,4 +1,5 @@
 import lxml.etree as ET
+import zipfile
 
 NS = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -59,3 +60,13 @@ class FootnoteList(object):
     @staticmethod
     def from_file(f):
         return FootnoteList(ET.parse(f))
+
+    @staticmethod
+    def from_docx(filename):
+        """Return a FootnoteList from a zipfile name."""
+
+        with zipfile.ZipFile(filename, 'r') as zipf:
+            with zipf.open('word/footnotes.xml') as xml_file:
+                footnote_list = FootnoteList.from_file(xml_file)
+
+        return footnote_list

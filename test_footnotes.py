@@ -2,8 +2,9 @@ import sys
 import lxml.etree as ET
 
 from footnotes.footnotes import FootnoteList, NS
+NS
 
-fns = FootnoteList.from_file(sys.argv[1])
+fns = FootnoteList.from_docx(sys.argv[1])
 fnl = fns.footnotes
 
 def dump(elem):
