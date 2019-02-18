@@ -1,5 +1,8 @@
+import itertools
 import lxml.etree as ET
 import zipfile
+
+from .text import Range, TextRef, Location
 
 NS = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -34,8 +37,12 @@ class Run(object):
     def text(self):
         """Unformatted text for run."""
 
-        text_elem = self.element.findall('w:t', NS)
+        text_elem = self.element.findall('.//w:t', NS)
         return text_elem[0].text if text_elem else ''
+
+    def text_refs(self):
+        text_elems = self.element.findall('.//w:t', NS)
+        return [TextRef(te, Location.TEXT, Range.from_str(te.text)) for te in text_elems]
 
 class Paragraph(object):
     """Represents a <w:r> element, a paragraph."""
@@ -43,18 +50,21 @@ class Paragraph(object):
     def __init__(self, element):
         assert element.tag == ns('w', 'p')
         self.element = element
-        self.runs = [Run(e) for e in self.element.findall('w:r', NS)]
+        self.runs = [Run(e) for e in self.element.findall('.//w:r', NS)]
 
     def text(self):
         """Unformatted text for paragraph."""
 
         return ''.join([r.text() for r in self.runs])
 
+    def text_refs(self):
+        return list(itertools.chain.from_iterable(r.text_refs() for r in self.runs))
+
 class Footnote(object):
     def __init__(self, element):
         assert element.tag == ns('w', 'footnote')
         self.element = element
-        self.paragraphs = [Paragraph(e) for e in self.element.findall('w:p', NS)]
+        self.paragraphs = [Paragraph(e) for e in self.element.findall('.//w:p', NS)]
 
     def id(self):
         """Footnote id. Should be the same as the number you see in the document."""
@@ -66,12 +76,15 @@ class Footnote(object):
 
         return ''.join([p.text() for p in self.paragraphs])
 
+    def text_refs(self):
+        return list(itertools.chain.from_iterable(p.text_refs() for p in self.paragraphs))
+
 class FootnoteList(object):
     def __init__(self, tree):
         self.tree = tree
         self.root = tree.getroot()
 
-        self.footnotes = [Footnote(elem) for elem in self.root.findall('w:footnote', NS)]
+        self.footnotes = [Footnote(elem) for elem in self.root.findall('.//w:footnote', NS)]
         print("Found {} footnotes.".format(len(self.footnotes)))
 
     def __iter__(self):

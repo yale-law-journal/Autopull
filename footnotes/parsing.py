@@ -1,52 +1,110 @@
+import bisect
+from enum import Enum
 import itertools
 from nltk.tokenize import PunktSentenceTokenizer
+import re
 
-from .lib import cached_property
+from .text import Range
 
 def normalize(text):
-    return text.replace('“', '"').replace('”', '"')
+    return text.replace('“', '"').replace('”', '"').replace('\u00A0', ' ')
 
-class Token(object):
-    def __init__(self, i, j):
-        self.i = i
-        self.j = j
+def relative_offset(offsets, index, offset):
+    return offset - (offsets[index - 1] if index > 0 else 0)
 
-    def slice(self, text):
-        return text[self.i:self.j]
+class Parseable(object):
+    Side = Enum('Side', 'LEFT RIGHT')
 
-    def combine(self, next):
-        self.j = next.j
+    URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
 
-    def split(self, text, separator):
-        start_idx = self.i
-        tokens = []
-        while True:
-            end_idx = text.find(separator, start_idx, self.j)
-            if end_idx < 0:
-                tokens.append(Token(start_idx, self.j))
-                break
-            tokens.append(Token(start_idx, end_idx + len(separator)))
-            start_idx = end_idx + len(separator)
+    def __init__(self, text_refs):
+        self.text_refs = text_refs
 
-        return tokens
+    def __str__(self):
+        return ''.join(str(tr) for tr in self.text_refs)
 
-class Paragraph(object):
-    def __init__(self, text):
-        self.text = normalize(text).strip()
+    def __repr__(self):
+        return 'TextObject({!r})'.format(self.text_refs)
+
+    def __len__(self):
+        return sum(len(tr) for tr in self.text_refs)
+
+    def _offsets(self):
+        """Offset of each constituent text ref. The first one is omitted"""
+
+        lengths = (len(tr.range) for tr in self.text_refs)
+        offsets = itertools.accumulate(lengths)
+
+        # This should leave one offset behind (the total length)
+        return list(offsets)
+
+    def _find(self, offset, side=Side.LEFT):
+        """Get (TextRef index, relative offset) for text to left or right of a given offset (insertion point)."""
+
+        offsets = self._offsets()
+        if side == Parseable.Side.LEFT:
+            index = bisect.bisect_left(offsets, offset)
+        else:
+            index = bisect.bisect_right(offsets, offset)
+
+        rel_offset = offset - (offsets[index - 1] if index > 0 else 0)
+        return index, rel_offset
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            if key.step is not None and key.step != 1:
+                raise TypeError('TextObject slice step not supported.')
+
+            start, stop = key.start, key.stop
+            if start is None: start = 0
+            if start < 0: start += len(self)
+            if stop is None: stop = len(self)
+            if stop < 0: stop += len(self)
+
+            start_index, start_rel_offset = self._find(start, side=Parseable.Side.RIGHT)
+            stop_index, stop_rel_offset = self._find(stop, side=Parseable.Side.LEFT)
+            assert stop_index >= start_index
+
+            refs = [tr[:] for tr in self.text_refs[start_index:stop_index + 1]]
+            refs[0].range.i = start_rel_offset
+            refs[-1].range.j = stop_rel_offset
+
+            return Parseable(refs)
+        else:
+            raise TypeError('TextObject indices must be slices.')
+
+    def find(self, offset, side=Side.LEFT):
+        """Get (TextRef, relative offset) for text to left or right of a given offset (insertion point)."""
+
+        index, rel_offset = self._find(offset, side)
+        return self.text_refs[index], rel_offset
+
+    def insert(self, offset, s, side=Side.LEFT):
+        """Insert string `s` at `offset` into this object's underlying XML."""
+        text_ref, rel_offset = self.find(offset, side)
+        if side == Parseable.Side.LEFT:
+            return text_ref.insert(rel_offset, s)
+
+    def insert_after(self, s):
+        return self.insert(len(self), s, side=Parseable.Side.LEFT)
 
     def citation_sentences(self, abbreviations):
-        tokenizer = PunktSentenceTokenizer()
-        first_pass = [Token(*t) for t in tokenizer.span_tokenize(self.text)]
+        """Attempt to parse the text into a list of citations."""
 
-        split = itertools.chain.from_iterable(t.split(self.text, '; ') for t in first_pass)
+        text = normalize(str(self))
+
+        tokenizer = PunktSentenceTokenizer()
+        first_pass = (Range(*t) for t in tokenizer.span_tokenize(text))
+
+        split = itertools.chain.from_iterable(t.split(text, '; ') for t in first_pass)
 
         compacted = []
-        for token in split:
+        for candidate in split:
             if not compacted:
-                compacted.append(token)
+                compacted.append(candidate)
             else:
-                last = compacted[-1].slice(self.text)
-                addition = token.slice(self.text)
+                last = compacted[-1].slice(text)
+                addition = candidate.slice(text)
                 _, _, last_word = last.rpartition(' ')
                 paren_depth = last.count('(') - last.count(')')
                 bracket_depth = last.count('[') - last.count(']')
@@ -56,15 +114,26 @@ class Paragraph(object):
                         or paren_depth > 0
                         or bracket_depth > 0
                         or quote_depth > 0):
-                    compacted[-1].combine(token)
+                    compacted[-1].combine(candidate)
                 else:
-                    compacted.append(token)
+                    compacted.append(candidate)
 
-        return [Sentence(t.slice(self.text)) for t in compacted]
+        return [self[t.slice()] for t in compacted]
 
-class Sentence(object):
-    def __init__(self, text):
-        self.text = text
+    def link_spans(self):
+        text = str(self)
+        results = Parseable.URL_RE.finditer(text)
+        urls = []
+        for m in results:
+            url = Range.from_match(m, 'url')
+            pre = text[0:m.start('url')]
+            paren_depth = pre.count('(') - pre.count(')')
+            while paren_depth > 0 and text[url.j - 1] == ')':
+                url.j -= 1
+                paren_depth -= 1
+            urls.append(self[url.slice()])
 
-    def __str__(self):
-        return self.text
+        return urls
+
+    def links(self):
+        return [str(r) for r in self.link_spans()]
