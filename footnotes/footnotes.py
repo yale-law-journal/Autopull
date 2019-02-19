@@ -96,12 +96,46 @@ class FootnoteList(object):
 
         return FootnoteList(ET.parse(f))
 
-    @staticmethod
-    def from_docx(filename):
-        """Return a FootnoteList from a zipfile name."""
+    def remove_hyperlinks(self):
+        hyperlinks = self.root.findall('.//w:hyperlink', NS)
+        for hyper in hyperlinks:
+            children = list(hyper)
+            parent = hyper.getparent()
+            parent_children = list(parent)
+            hyper_idx = parent_children.index(hyper)
+            parent.remove(hyper)
+            for idx, child in enumerate(children):
+                parent.insert(hyper_idx + idx, child)
 
-        with zipfile.ZipFile(filename, 'r') as zipf:
-            with zipf.open('word/footnotes.xml') as xml_file:
-                footnote_list = FootnoteList.from_file(xml_file)
+        hyperlink_styles = self.root.findall('.//w:rStyle[@w:val=\'Hyperlink\']', NS)
+        for style in hyperlink_styles:
+            style.getparent().remove(style)
 
-        return footnote_list
+class Docx(object):
+    def __init__(self, filename, mode='r'):
+        self.filename = filename
+        self.mode = mode
+        self.zipf = None
+        self.footnotes_xml = None
+        self.footnote_list = None
+
+    def __enter__(self):
+        self.zipf = zipfile.ZipFile(self.filename)
+        self.footnotes_xml = self.zipf.open('word/footnotes.xml', self.mode)
+        self.footnote_list = FootnoteList.from_file(self.footnotes_xml)
+
+        return self
+
+    def __exit__(self, typ, value, traceback):
+        self.footnotes_xml.close()
+        self.zipf.close()
+        self.footnote_list = None
+
+    def write(self, new_filename):
+        with zipfile.ZipFile(new_filename, 'w') as new_zipf:
+            for info in self.zipf.infolist():
+                if info.filename == 'word/footnotes.xml':
+                    with new_zipf.open(info, 'w') as out:
+                        self.footnote_list.tree.write(out, encoding='utf-8')
+                else:
+                    new_zipf.writestr(info, self.zipf.read(info))

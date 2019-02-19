@@ -120,7 +120,7 @@ class Parseable(object):
 
         return [self[t.slice()] for t in compacted]
 
-    def link_spans(self):
+    def links(self):
         text = str(self)
         results = Parseable.URL_RE.finditer(text)
         urls = []
@@ -135,5 +135,5 @@ class Parseable(object):
 
         return urls
 
-    def links(self):
-        return [str(r) for r in self.link_spans()]
+    def link_strs(self):
+        return [str(r) for r in self.links()]

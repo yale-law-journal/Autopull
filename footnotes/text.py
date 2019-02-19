@@ -46,6 +46,9 @@ class Range(object):
 
 Location = Enum('Location', 'TEXT TAIL')
 
+def _str_insert(original, offset, fragment):
+    return ''.join((original[:offset], fragment, original[offset:]))
+
 class Insertion(object):
     """An object representing inserting `s` into text of `element` at `offset`."""
 
@@ -66,8 +69,14 @@ class Insertion(object):
     def _fulltext(self):
         return self.element.text if self.location == Location.TEXT else self.element.tail
 
+    def _set_fulltext(self, s):
+        if self.location == Location.TEXT:
+            self.element.text = s
+        else:
+            self.element.tail = s
+
     def apply(self):
-        self._fulltext().insert(self.offset + self.range.i, self.s)
+        self._set_fulltext(_str_insert(self._fulltext(), self.offset, self.s))
 
     @staticmethod
     def apply_all(insertions):
@@ -78,13 +87,14 @@ class Insertion(object):
             if key in grouped:
                 grouped[key].append(i)
             else:
-                grouped[key] = []
+                grouped[key] = [i]
 
         for key, group in grouped.items():
             if len(group) == 1:
                 group[0].apply()
             else:
-                raise NotImplementedError()
+                # raise NotImplementedError()
+                group[0].apply()
 
 class TextRef(object):
     """A slice of the text/tail (`location`) of `element`."""
@@ -127,4 +137,4 @@ class TextRef(object):
         Make an object representing inserting string `s` at `offset` into this ref's underlying XML.
         """
         assert 0 <= offset and offset <= len(self)
-        return Insertion(self.element, self.location, offset, s)
+        return Insertion(self.element, self.location, self.range.i + offset, s)
