@@ -3,6 +3,7 @@ import sys
 
 from footnotes.footnotes import Docx
 from footnotes.parsing import Parseable
+from footnotes.perma import make_permas
 from footnotes.text import Insertion
 
 with open(join(sys.path[0], 'abbreviations.txt')) as f:
@@ -11,13 +12,18 @@ with open(join(sys.path[0], 'abbreviations.txt')) as f:
 
 with Docx(sys.argv[1]) as docx:
     footnotes = docx.footnote_list
-    insertions = []
-    for fn in footnotes:
-        if fn.id() <= 0: continue
 
-        parsed = Parseable(fn.text_refs())
-        for url in parsed.links():
-            insertions.append(url.insert_after(' [perma]'))
+    urls = []
+    for fn in footnotes:
+        urls.extend(Parseable(fn.text_refs()).links())
+
+    permas = make_permas([str(url) for url in urls])
+
+    insertions = []
+    for url in urls:
+        url_str = str(url)
+        if url_str in permas:
+            insertions.append(url.insert_after(' [{}]'.format(permas[url_str])))
 
     print('Applying insertions.')
     Insertion.apply_all(insertions)
