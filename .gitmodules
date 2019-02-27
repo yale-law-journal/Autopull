@@ -1,0 +1,3 @@
+[submodule "reporters-db"]
+	path = reporters-db
+	url = https://github.com/freelawproject/reporters-db

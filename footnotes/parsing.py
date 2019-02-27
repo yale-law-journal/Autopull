@@ -17,6 +17,8 @@ class Parseable(object):
 
     URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
 
+    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |([A-Z][A-Za-z\.]*\.? ))+)[0-9]+)')
+
     def __init__(self, text_refs):
         self.text_refs = text_refs
 
@@ -96,15 +98,13 @@ class Parseable(object):
         tokenizer = PunktSentenceTokenizer()
         first_pass = (Range(*t) for t in tokenizer.span_tokenize(text))
 
-        split = itertools.chain.from_iterable(t.split(text, '; ') for t in first_pass)
-
         compacted = []
-        for candidate in split:
+        for candidate in first_pass:
             if not compacted:
                 compacted.append(candidate)
             else:
-                last = compacted[-1].slice(text)
-                addition = candidate.slice(text)
+                last = text[compacted[-1].slice()]
+                addition = text[candidate.slice()]
                 _, _, last_word = last.rpartition(' ')
                 paren_depth = last.count('(') - last.count(')')
                 bracket_depth = last.count('[') - last.count(']')
@@ -118,7 +118,9 @@ class Parseable(object):
                 else:
                     compacted.append(candidate)
 
-        return [self[t.slice()] for t in compacted]
+        split = itertools.chain.from_iterable(t.split(text, '; ') for t in compacted)
+
+        return [self[t.slice()] for t in split]
 
     def links(self):
         text = str(self)
@@ -137,3 +139,32 @@ class Parseable(object):
 
     def link_strs(self):
         return [str(r) for r in self.links()]
+
+    def citation(self, reporters=set()):
+        match = Parseable.CITATION_RE.search(str(self))
+        if match is None:
+            return None
+
+        source = match.group('source').strip().replace(' ', '')
+        sliced = self[Range.from_match(match, 'cite').slice()]
+        if source in reporters:
+            return ReporterCitation(sliced)
+        else:
+            return Citation(sliced)
+
+class Citation(object):
+    def __init__(self, citation):
+        self.citation = citation
+
+    def __str__(self):
+        return 'Citation: {}'.format(self.citation)
+
+    def __repr__(self):
+        return 'Citation({!r})'.format(self.citation)
+
+class ReporterCitation(Citation):
+    def __repr__(self):
+        return 'ReporterCitation({!r})'.format(self.citation)
+
+    def __str__(self):
+        return 'Reporter citation: {}'.format(self.citation)
