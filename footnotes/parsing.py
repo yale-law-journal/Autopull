@@ -68,8 +68,8 @@ class Parseable(object):
             assert stop_index >= start_index
 
             refs = [tr[:] for tr in self.text_refs[start_index:stop_index + 1]]
-            refs[0].range.i = start_rel_offset
-            refs[-1].range.j = stop_rel_offset
+            refs[-1] = refs[-1][:stop_rel_offset]
+            refs[0] = refs[0][start_rel_offset:]
 
             return Parseable(refs)
         else:
@@ -140,31 +140,22 @@ class Parseable(object):
     def link_strs(self):
         return [str(r) for r in self.links()]
 
-    def citation(self, reporters=set()):
+    def citation(self):
         match = Parseable.CITATION_RE.search(str(self))
         if match is None:
             return None
 
         source = match.group('source').strip().replace(' ', '')
         sliced = self[Range.from_match(match, 'cite').slice()]
-        if source in reporters:
-            return ReporterCitation(sliced)
-        else:
-            return Citation(sliced)
+        return Citation(sliced, source)
 
 class Citation(object):
-    def __init__(self, citation):
+    def __init__(self, citation, source):
         self.citation = citation
+        self.source = source
 
     def __str__(self):
         return 'Citation: {}'.format(self.citation)
 
     def __repr__(self):
         return 'Citation({!r})'.format(self.citation)
-
-class ReporterCitation(Citation):
-    def __repr__(self):
-        return 'ReporterCitation({!r})'.format(self.citation)
-
-    def __str__(self):
-        return 'Reporter citation: {}'.format(self.citation)

@@ -17,6 +17,11 @@ with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.j
     reporters_variants = chain.from_iterable(info['variations'].items() for info in reporters_infos)
     reporters_spaces = set(chain.from_iterable(reporters_variants))
     reporters = set(r.replace(' ', '') for r in reporters_spaces)
+
+    # This is a weird special case.
+    reporters.remove('Tex.L.Rev.')
+    reporters.remove('TexasL.Rev.')
+
     print("Found {} reporter abbreviations.".format(len(reporters)))
 
 with Docx(sys.argv[1]) as docx:
@@ -27,6 +32,15 @@ with Docx(sys.argv[1]) as docx:
             parsed = Parseable(para.text_refs())
             citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
             for sentence in citation_sentences:
-                match = sentence.citation(reporters=reporters)
-                if match:
-                    print(fn.id(), match)
+                match = sentence.citation()
+                if not match: continue
+
+                citation_type = 'Other'
+                if match.source in reporters:
+                    citation_type = 'Case'
+                elif match.source in ['Cong.Rec.', 'CongressionalRecord', 'Cong.Globe']:
+                    citation_type = 'Congress'
+                elif match.source == 'Stat.':
+                    citation_type = 'Statute'
+
+                print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
