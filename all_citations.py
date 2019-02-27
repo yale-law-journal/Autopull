@@ -62,6 +62,10 @@ with Docx(sys.argv[1]) as docx:
             for idx, sentence in enumerate(citation_sentences):
                 pull_info = PullInfo(first_fn='{}.{}'.format(fn.id() - 2, idx + 1), second_fn=None, citation=str(sentence).strip())
 
+                links = sentence.link_strs()
+                if links:
+                    pull_info.notes = links[0]
+
                 match = sentence.citation()
                 if not match:
                     spreadsheet.append(pull_info.out_dict())
@@ -77,6 +81,7 @@ with Docx(sys.argv[1]) as docx:
 
                 pull_info.source = str(match.citation).strip()
                 pull_info.citation_type = citation_type
+
                 spreadsheet.append(pull_info.out_dict())
 
                 print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
