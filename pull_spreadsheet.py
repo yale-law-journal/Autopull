@@ -1,7 +1,8 @@
+import argparse
 from collections import namedtuple
 from itertools import chain
 import json
-from os.path import join
+from os.path import basename, dirname, join
 import re
 import sys
 from urllib.parse import urlencode
@@ -9,6 +10,11 @@ from urllib.parse import urlencode
 from footnotes.footnotes import Docx
 from footnotes.parsing import Parseable
 from footnotes.spreadsheet import Spreadsheet
+
+parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
+parser.add_argument('docx', help='Input Word file.')
+
+args = parser.parse_args()
 
 class PullInfo(object):
     def __init__(self, first_fn, second_fn, citation, citation_type='',
@@ -38,7 +44,8 @@ with open(join(sys.path[0], 'config.json')) as f:
     config = json.load(f)
 
 with open(join(sys.path[0], 'abbreviations.txt')) as f:
-    abbreviations = set((a.strip() for a in f if a.endswith('.\n')))
+    abbreviations = set(a.strip() for a in f if a.endswith('.\n'))
+    abbreviations = abbreviations | set(a[:-1] + 's.' for a in abbreviations if a.endswith('.') and not a.endswith('s.'))
     print("Found {} abbreviations.".format(len(abbreviations)))
 
 with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.json')) as f:
@@ -54,7 +61,7 @@ with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.j
 
     print("Found {} reporter abbreviations.".format(len(reporters)))
 
-with Docx(sys.argv[1]) as docx:
+with Docx(args.docx) as docx:
     footnotes = docx.footnote_list
     spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
 
@@ -103,7 +110,9 @@ with Docx(sys.argv[1]) as docx:
                             'year': config['govinfo']['uscode_year'],
                         }))
 
-            if match.source in ['U.S.', 'Stat.'] or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source)):
+            if (match.source in ['U.S.', 'Stat.']
+                    or citation_type == 'Congress'
+                    or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source)):
                 pull_info.notes = 'https://heinonline.org/HOL/OneBoxCitation?{}'.format(urlencode({ 'cit_string': citation_text }))
 
             if match.source in ['Fed.Reg.', 'F.R.']:
@@ -114,6 +123,13 @@ with Docx(sys.argv[1]) as docx:
                     'link-type': 'pdf',
                 }))
 
+            if citation_type == 'Case':
+                if not pull_info.notes:
+                    pull_info.notes = 'https://1.next.westlaw.com/Search/Results.html?{}'.format(urlencode({
+                        'query': citation_text,
+                        'jurisdiction': 'ALLCASES',
+                    }))
+
             pull_info.source = str(match.citation).strip()
             pull_info.citation_type = citation_type
 
@@ -121,4 +137,8 @@ with Docx(sys.argv[1]) as docx:
 
             print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
 
-    spreadsheet.write_xlsx_path('pull.xlsx')
+    in_name = basename(args.docx)
+    if not in_name.endswith('.docx'):
+        in_name += '.docx'
+    out_name = 'Bookpull.{}.xlsx'.format(in_name[:-5])
+    spreadsheet.write_xlsx_path(join(dirname(args.docx), out_name))

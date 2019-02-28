@@ -17,11 +17,12 @@ class Parseable(object):
 
     URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
 
-    SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
-    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§? )?[0-9,]*[0-9])'.format(word=SOURCE_WORD))
-
     SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
+
+    SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
+    CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§? )?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
+
     XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
     OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
     SUPRA_RE = re.compile(r'supra note')
@@ -171,6 +172,9 @@ class Parseable(object):
 
         if Parseable.ID_RE.match(text) or Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
             # print('  X-ref or repeated source.')
+            return False
+
+        if not re.search(r'[0-9]', text):
             return False
 
         if Parseable.OPENING_SIGNAL_RE.match(text):
