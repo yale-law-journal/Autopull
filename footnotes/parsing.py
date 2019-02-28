@@ -17,7 +17,17 @@ class Parseable(object):
 
     URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
 
-    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |([A-Z][A-Za-z\.]*\.? ))+)[0-9]+)')
+    SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
+    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§ )?[0-9]+)'.format(word=SOURCE_WORD))
+
+    SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
+    SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
+    XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
+    OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
+    SUPRA_RE = re.compile(r'supra note')
+    ID_RE = re.compile(r'^({signal} id\.|Id\.)( |$)'.format(signal=SIGNAL))
+
+    CAPITAL_WORDS_RE = re.compile(r'[A-Z][A-Za-z]*[,:;.]? [A-Z]')
 
     def __init__(self, text_refs):
         self.text_refs = text_refs
@@ -83,6 +93,7 @@ class Parseable(object):
 
     def insert(self, offset, s, side=Side.LEFT):
         """Insert string `s` at `offset` into this object's underlying XML."""
+
         text_ref, rel_offset = self.find(offset, side)
         if side == Parseable.Side.LEFT:
             return text_ref.insert(rel_offset, s)
@@ -98,18 +109,33 @@ class Parseable(object):
         tokenizer = PunktSentenceTokenizer()
         first_pass = (Range(*t) for t in tokenizer.span_tokenize(text))
 
+        # Split at any end paren followed by a capital letter.
+        def paren_cap(tokens):
+            result = []
+            for t in tokens:
+                last_index = t.i
+                for match in re.finditer(r'\) [A-Z]', str(self[t.slice()])):
+                    yield Range(last_index, match.end() - 2)
+                    last_index = match.end() - 1
+                yield Range(last_index, t.j)
+
+        second_pass = paren_cap(first_pass)
+
         compacted = []
-        for candidate in first_pass:
+        for candidate in second_pass:
             if not compacted:
                 compacted.append(candidate)
             else:
                 last = text[compacted[-1].slice()]
                 addition = text[candidate.slice()]
                 _, _, last_word = last.rpartition(' ')
+                next_word, _, following = addition.partition(' ')
                 paren_depth = last.count('(') - last.count(')')
                 bracket_depth = last.count('[') - last.count(']')
                 quote_depth = last.count('"') % 2
                 if (last_word in abbreviations
+                        or addition in abbreviations
+                        or (next_word in abbreviations and following in abbreviations)
                         or not addition[0].isupper()
                         or paren_depth > 0
                         or bracket_depth > 0
@@ -139,6 +165,27 @@ class Parseable(object):
 
     def link_strs(self):
         return [str(r) for r in self.links()]
+
+    def is_new_citation(self):
+        text = str(self).strip()
+
+        if Parseable.ID_RE.match(text) or Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
+            # print('  X-ref or repeated source.')
+            return False
+
+        if Parseable.OPENING_SIGNAL_RE.match(text):
+            # print('  Opening signal!')
+            return True
+
+        if Parseable.CAPITAL_WORDS_RE.search(text):
+            # print('  Capital words!')
+            return True
+
+        if self.links():
+            # print('  Link!')
+            return True
+
+        return False
 
     def citation(self):
         match = Parseable.CITATION_RE.search(str(self))

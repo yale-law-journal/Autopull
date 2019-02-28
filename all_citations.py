@@ -56,34 +56,39 @@ with Docx(sys.argv[1]) as docx:
 
     for fn in footnotes:
         if fn.id() <= 0: continue
-        for para in fn.paragraphs:
-            parsed = Parseable(para.text_refs())
-            citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
-            for idx, sentence in enumerate(citation_sentences):
-                pull_info = PullInfo(first_fn='{}.{}'.format(fn.id() - 2, idx + 1), second_fn=None, citation=str(sentence).strip())
 
-                links = sentence.link_strs()
-                if links:
-                    pull_info.notes = links[0]
+        parsed = Parseable(fn.text_refs())
+        citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
+        for idx, sentence in enumerate(citation_sentences):
+            # print(str(sentence).strip())
+            if not sentence.is_new_citation():
+                # print('    skipping')
+                continue
 
-                match = sentence.citation()
-                if not match:
-                    spreadsheet.append(pull_info.out_dict())
-                    continue
+            pull_info = PullInfo(first_fn='{}.{}'.format(fn.id() - 2, idx + 1), second_fn=None, citation=str(sentence).strip())
 
-                citation_type = 'Other'
-                if match.source in reporters:
-                    citation_type = 'Case'
-                elif match.source in ['Cong.Rec.', 'CongressionalRecord', 'Cong.Globe']:
-                    citation_type = 'Congress'
-                elif match.source == 'Stat.':
-                    citation_type = 'Statute'
+            links = sentence.link_strs()
+            if links:
+                pull_info.notes = links[0]
 
-                pull_info.source = str(match.citation).strip()
-                pull_info.citation_type = citation_type
-
+            match = sentence.citation()
+            if not match:
                 spreadsheet.append(pull_info.out_dict())
+                continue
 
-                print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
+            citation_type = 'Other'
+            if match.source in reporters:
+                citation_type = 'Case'
+            elif match.source in ['Cong.Rec.', 'CongressionalRecord', 'Cong.Globe']:
+                citation_type = 'Congress'
+            elif match.source == 'Stat.':
+                citation_type = 'Statute'
+
+            pull_info.source = str(match.citation).strip()
+            pull_info.citation_type = citation_type
+
+            spreadsheet.append(pull_info.out_dict())
+
+            print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
 
     spreadsheet.write_xlsx_path('pull.xlsx')

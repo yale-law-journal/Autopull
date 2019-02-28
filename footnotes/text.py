@@ -1,4 +1,5 @@
 from enum import Enum
+import re
 
 class Range(object):
     def __init__(self, i, j):
@@ -37,12 +38,11 @@ class Range(object):
         while True:
             end_idx = text.find(separator, start_idx, self.j)
             if end_idx < 0:
-                tokens.append(Range(start_idx, self.j))
+                yield Range(start_idx, self.j)
                 break
-            tokens.append(Range(start_idx, end_idx))
-            start_idx = end_idx + len(separator)
 
-        return tokens
+            yield Range(start_idx, end_idx)
+            start_idx = end_idx + len(separator)
 
 Location = Enum('Location', 'TEXT TAIL')
 
