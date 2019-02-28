@@ -4,6 +4,7 @@ import json
 from os.path import join
 import re
 import sys
+from urllib.parse import urlencode
 
 from footnotes.footnotes import Docx
 from footnotes.parsing import Parseable
@@ -32,6 +33,9 @@ class PullInfo(object):
             'Puller': self.puller,
             'Notes': self.notes,
         }
+
+with open(join(sys.path[0], 'config.json')) as f:
+    config = json.load(f)
 
 with open(join(sys.path[0], 'abbreviations.txt')) as f:
     abbreviations = set((a.strip() for a in f if a.endswith('.\n')))
@@ -76,6 +80,7 @@ with Docx(sys.argv[1]) as docx:
                 spreadsheet.append(pull_info.out_dict())
                 continue
 
+            citation_text = str(match.citation)
             citation_type = 'Other'
             if match.source in reporters:
                 citation_type = 'Case'
@@ -83,6 +88,31 @@ with Docx(sys.argv[1]) as docx:
                 citation_type = 'Congress'
             elif match.source == 'Stat.':
                 citation_type = 'Statute'
+
+            if match.source in ['USC', 'U.S.C.']:
+                section_range = r'[0-9]+([-–—][0-9]+)?'
+                re_match = re.match(r'(?P<title>[0-9]+) U\.? ?S\.? ?C\.? (§§? )?(?P<sections>({s}, )*{s})'.format(s=section_range), citation_text)
+                if re_match:
+                    title = int(re_match.group('title'))
+                    sections = re_match.group('sections')
+                    print('USC cite: {} {}'.format(title, sections))
+                    if sections.isdigit():
+                        pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, sections, urlencode({
+                            'link-type': 'pdf',
+                            'type': 'usc',
+                            'year': config['govinfo']['uscode_year'],
+                        }))
+
+            if match.source in ['U.S.', 'Stat.'] or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source)):
+                pull_info.notes = 'https://heinonline.org/HOL/OneBoxCitation?{}'.format(urlencode({ 'cit_string': citation_text }))
+
+            if match.source in ['Fed.Reg.', 'F.R.']:
+                re_match = re.match(r'(?P<volume>[0-9]+) (F\. ?R\.|Fed\. ?Reg\.) (?P<page>[0-9,]+)', citation_text)
+                volume = int(re_match.group('volume'))
+                page = int(re_match.group('page').replace(',', ''))
+                pull_info.notes = 'https://www.govinfo.gov/link/fr/{}/{}?{}'.format(volume, page, urlencode({
+                    'link-type': 'pdf',
+                }))
 
             pull_info.source = str(match.citation).strip()
             pull_info.citation_type = citation_type

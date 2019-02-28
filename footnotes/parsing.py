@@ -18,7 +18,7 @@ class Parseable(object):
     URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
 
     SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
-    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§ )?[0-9]+)'.format(word=SOURCE_WORD))
+    CITATION_RE = re.compile(r'(, |^ ?)(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§? )?[0-9,]*[0-9])'.format(word=SOURCE_WORD))
 
     SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
