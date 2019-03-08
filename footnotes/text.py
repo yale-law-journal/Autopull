@@ -104,11 +104,19 @@ class TextRef(object):
         self.location = location
         self.range = range
 
-    def _fulltext(self):
+    @staticmethod
+    def from_text(self, element):
+        return TextRef(element, Location.TEXT, Range(0, len(element.text)))
+
+    @staticmethod
+    def from_tail(self, element):
+        return TextRef(element, Location.TAIL, Range(0, len(element.tail)))
+
+    def fulltext(self):
         return self.element.text if self.location == Location.TEXT else self.element.tail
 
     def __str__(self):
-        return self._fulltext()[self.range.slice()]
+        return self.fulltext()[self.range.slice()]
 
     def __repr__(self):
         return 'TextRef({!r}, {!r}, {!r})'.format(self.element, self.location, self.range)

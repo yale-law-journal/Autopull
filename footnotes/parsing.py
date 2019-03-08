@@ -4,7 +4,7 @@ import itertools
 from nltk.tokenize import PunktSentenceTokenizer
 import re
 
-from .text import Range
+from .text import Range, TextRef
 
 def normalize(text):
     return text.replace('“', '"').replace('”', '"').replace('\u00A0', ' ')
@@ -31,7 +31,29 @@ class Parseable(object):
     CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
     def __init__(self, text_refs):
+        if len(text_refs) > 1:
+            tr0 = text_refs[0]
+            tr1 = text_refs[-1]
+            assert tr0.range.j == len(tr0.fulltext())
+            assert tr1.range.i == 0
+            for tr in text_refs[1:-1]:
+                assert tr.range.i == 0
+                assert tr.range.j == len(tr.fulltext())
+
         self.text_refs = text_refs
+
+    @staticmethod
+    def from_element(self, element):
+        def gather_refs(parent):
+            for child in root:
+                if len(child.text) > 0:
+                    yield TextRef.from_text(child)
+                yield from gather_refs(child)
+
+            if len(parent.tail) > 0:
+                yield TextRef.from_tail(parent)
+
+        return Parseable(list(gather_refs(element)))
 
     def __str__(self):
         return ''.join(str(tr) for tr in self.text_refs)
@@ -64,7 +86,9 @@ class Parseable(object):
         return index, rel_offset
 
     def __getitem__(self, key):
-        if isinstance(key, slice):
+        if isinstance(key, int):
+            return str(self)[key]
+        elif isinstance(key, slice):
             if key.step is not None and key.step != 1:
                 raise TypeError('TextObject slice step not supported.')
 
@@ -76,13 +100,16 @@ class Parseable(object):
 
             start_index, start_rel_offset = self._find(start, side=Parseable.Side.RIGHT)
             stop_index, stop_rel_offset = self._find(stop, side=Parseable.Side.LEFT)
-            assert stop_index >= start_index
+            assert start == stop or stop_index >= start_index
 
-            refs = [tr[:] for tr in self.text_refs[start_index:stop_index + 1]]
-            refs[-1] = refs[-1][:stop_rel_offset]
-            refs[0] = refs[0][start_rel_offset:]
+            if start == stop:
+                return Parseable([])
+            else:
+                refs = [tr[:] for tr in self.text_refs[start_index:stop_index + 1]]
+                refs[-1] = refs[-1][:stop_rel_offset]
+                refs[0] = refs[0][start_rel_offset:]
 
-            return Parseable(refs)
+                return Parseable(refs)
         else:
             raise TypeError('TextObject indices must be slices.')
 
@@ -152,20 +179,24 @@ class Parseable(object):
     def links(self):
         text = str(self)
         results = Parseable.URL_RE.finditer(text)
-        urls = []
         for m in results:
             url = Range.from_match(m, 'url')
             pre = text[0:m.start('url')]
+
+            # Sometimes people put links in parentheses. Work around that.
             paren_depth = pre.count('(') - pre.count(')')
             while paren_depth > 0 and text[url.j - 1] == ')':
                 url.j -= 1
                 paren_depth -= 1
-            urls.append(self[url.slice()])
 
-        return urls
+            # Unfortunately URLs can't end with a semicolon.
+            if text[url.j - 1] == ';':
+                url.j -= 1
+
+            yield (url, self[url.slice()])
 
     def link_strs(self):
-        return [str(r) for r in self.links()]
+        return (str(r) for _, r in self.links())
 
     def is_new_citation(self):
         text = str(self).strip()

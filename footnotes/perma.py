@@ -9,10 +9,10 @@ API_CHUNK_SIZE = 10
 
 try:
     with open(join(sys.path[0], 'config.json')) as config_f:
-        CONFIG = json.load(config_f)
+        CONFIG = json.load(config_f)['perma']
 except FileNotFoundError:
     with open('config.json') as config_f:
-        CONFIG = json.load(config_f)
+        CONFIG = json.load(config_f)['perma']
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
@@ -26,10 +26,11 @@ async def make_permas_batch(session, urls, folder, result):
     print('Starting batch of {}...'.format(len(urls)))
     for _ in range(3):
         async with session.post(API_ENDPOINT, params=params, json=data) as response:
-            # print('Status: {}; content type: {}.'.format(response.status, response.content_type))
-            if response.status == 201 and response.content_type != 'application/json':
+            print('Status: {}; content type: {}.'.format(response.status, response.content_type))
+            if response.status == 201 and response.content_type == 'application/json':
                 batch = await response.json()
                 print('Batch finished.')
+                print(json.dumps(batch, indent=4, sort_keys=True))
                 for job in batch['capture_jobs']:
                     result[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
 
