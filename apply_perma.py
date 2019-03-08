@@ -7,10 +7,6 @@ from footnotes.parsing import Parseable
 from footnotes.perma import make_permas
 from footnotes.text import Insertion
 
-with open(join(sys.path[0], 'abbreviations.txt')) as f:
-    abbreviations = set((a.strip() for a in f if a.endswith('.\n')))
-    print("Found {} abbreviations.".format(len(abbreviations)))
-
 # Look for any number of non-alpha characters followed by perma link.
 PERMA_RE = re.compile(r'[^A-Za-z0-9]*(https?://)?perma.cc')
 

@@ -1,10 +1,15 @@
 import bisect
 from enum import Enum
 import itertools
+from os.path import dirname, join
 from nltk.tokenize import PunktSentenceTokenizer
 import re
 
 from .text import Range, TextRef
+
+with open(join(dirname(__file__), 'abbreviations.txt')) as f:
+    abbreviations = set((a.strip() for a in f if a.endswith('.\n')))
+    print("Found {} abbreviations.".format(len(abbreviations)))
 
 def normalize(text):
     return text.replace('“', '"').replace('”', '"').replace('\u00A0', ' ')
@@ -129,7 +134,7 @@ class Parseable(object):
     def insert_after(self, s):
         return self.insert(len(self), s, side=Parseable.Side.LEFT)
 
-    def citation_sentences(self, abbreviations):
+    def citation_sentences(self):
         """Attempt to parse the text into a list of citations."""
 
         text = normalize(str(self))
