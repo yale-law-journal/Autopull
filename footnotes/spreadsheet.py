@@ -61,6 +61,11 @@ class Spreadsheet(object):
         for row_idx, row in enumerate(self.rows):
             for col_idx, col in enumerate(self.columns):
                 if col in row:
-                    worksheet.write(row_idx + 1, col_idx, row[col], column_formats[col_idx])
+                    text = row[col]
+                    if text is None: text = ''
+                    if ' ' in text:
+                        worksheet.write_string(row_idx + 1, col_idx, text, column_formats[col_idx])
+                    else:
+                        worksheet.write(row_idx + 1, col_idx, text, column_formats[col_idx])
 
         workbook.close()

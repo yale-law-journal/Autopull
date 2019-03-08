@@ -12,6 +12,8 @@ DATA_FILES = ['footnotes/config.json', 'footnotes/abbreviations.txt']
 OPTIONS = {
     'packages': ['footnotes', 'aiohttp', 'multidict'],
     'argv_emulation': True,
+    'iconfile': 'perma.icns',
+    'use_faulthandler': True,
     'plist': {
         'CFBundleIdentifier': 'org.yalelawjournal.Autopull',
         'CFBundleURLTypes': ['file'],

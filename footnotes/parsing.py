@@ -2,7 +2,6 @@ import bisect
 from enum import Enum
 import itertools
 from os.path import dirname, join
-from nltk.tokenize import PunktSentenceTokenizer
 import re
 
 from .text import Range, TextRef
@@ -134,13 +133,26 @@ class Parseable(object):
     def insert_after(self, s):
         return self.insert(len(self), s, side=Parseable.Side.LEFT)
 
-    def citation_sentences(self):
+    def citation_sentences(self, abbreviations=abbreviations):
         """Attempt to parse the text into a list of citations."""
 
         text = normalize(str(self))
+        # print(text)
 
-        tokenizer = PunktSentenceTokenizer()
-        first_pass = (Range(*t) for t in tokenizer.span_tokenize(text))
+        def tokens(text):
+            periods = re.finditer(r'\. +(?! )', text)
+            start = 0
+            while start < len(text) and text[start] == ' ':
+                start += 1
+
+            for match in periods:
+                yield Range(start, match.start(0) + 1)
+                start = match.end(0)
+
+            if start < len(text):
+                yield Range(start, len(text))
+
+        first_pass = tokens(text)
 
         # Split at any end paren followed by a capital letter.
         def paren_cap(tokens):
@@ -161,6 +173,7 @@ class Parseable(object):
             else:
                 last = text[compacted[-1].slice()]
                 addition = text[candidate.slice()]
+                # print('Last: [{}], Add: [{}]'.format(last, addition))
                 _, _, last_word = last.rpartition(' ')
                 next_word, _, following = addition.partition(' ')
                 paren_depth = last.count('(') - last.count(')')
@@ -194,14 +207,14 @@ class Parseable(object):
                 url.j -= 1
                 paren_depth -= 1
 
-            # Unfortunately URLs can't end with a semicolon.
-            if text[url.j - 1] == ';':
+            # URLs shouldn't end with a period or semicolon.
+            if text[url.j - 1] in [';', '.', ',']:
                 url.j -= 1
 
             yield (url, self[url.slice()])
 
     def link_strs(self):
-        return (str(r) for _, r in self.links())
+        return [str(r) for _, r in self.links()]
 
     def is_new_citation(self):
         text = str(self).strip()

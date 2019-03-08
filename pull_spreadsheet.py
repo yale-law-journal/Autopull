@@ -8,7 +8,7 @@ import sys
 from urllib.parse import urlencode
 
 from footnotes.footnotes import Docx
-from footnotes.parsing import Parseable
+from footnotes.parsing import abbreviations, Parseable
 from footnotes.spreadsheet import Spreadsheet
 
 parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
@@ -39,14 +39,6 @@ class PullInfo(object):
             'Puller': self.puller,
             'Notes': self.notes,
         }
-
-with open(join(sys.path[0], 'config.json')) as f:
-    config = json.load(f)
-
-with open(join(sys.path[0], 'abbreviations.txt')) as f:
-    abbreviations = set(a.strip() for a in f if a.endswith('.\n'))
-    abbreviations = abbreviations | set(a[:-1] + 's.' for a in abbreviations if a.endswith('.') and not a.endswith('s.'))
-    print("Found {} abbreviations.".format(len(abbreviations)))
 
 with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.json')) as f:
     reporters_json = json.load(f)
