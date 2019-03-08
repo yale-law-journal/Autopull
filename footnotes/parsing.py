@@ -21,14 +21,14 @@ class Parseable(object):
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
 
     SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
-    CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>[0-9]+ (?P<source>(& |{word} )*{word}) (§§? )?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
+    CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>(?P<volume>[0-9]+) (?P<source>(& |{word} )*{word}) (§§? ?)?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
 
     XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
     OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
     SUPRA_RE = re.compile(r'supra note')
     ID_RE = re.compile(r'^({signal} id\.|Id\.)( |$)'.format(signal=SIGNAL))
 
-    CAPITAL_WORDS_RE = re.compile(r'[A-Z][A-Za-z]*[,:;.]? [A-Z]')
+    CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
     def __init__(self, text_refs):
         self.text_refs = text_refs
@@ -170,8 +170,11 @@ class Parseable(object):
     def is_new_citation(self):
         text = str(self).strip()
 
-        if Parseable.ID_RE.match(text) or Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
+        if Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
             # print('  X-ref or repeated source.')
+            return False
+
+        if Parseable.ID_RE.match(text) and '§' not in text:
             return False
 
         if not re.search(r'[0-9]', text):
@@ -196,14 +199,53 @@ class Parseable(object):
         if match is None:
             return None
 
-        source = match.group('source').strip().replace(' ', '')
         sliced = self[Range.from_match(match, 'cite').slice()]
-        return Citation(sliced, source)
+        volume = int(match.group('volume').strip())
+        source = match.group('source').strip().replace(' ', '')
+        subdivisions = str(self)[match.end('source'):].strip()
+        return Citation(sliced, volume, source, subdivisions)
+
+class Subdivisions(object):
+    Type = Enum('Type', 'PAGE SECTION PARAGRAPH')
+
+    SECTION = '[0-9][0-9a-zA-Z,]*(-[0-9](?![0-9]))?'
+    SUBSECTION = r'[\(\)a-z0-9]*'
+    SECTION_RE = re.compile(r'(^|[,§¶]) ?(?P<start>{sec}){sub}([-–—](?P<end>{sec}){sub})?( |$)'.format(sec=SECTION, sub=SUBSECTION))
+
+    def __init__(self, subdivisions_str):
+        self.ranges = []
+        if subdivisions_str.startswith('§'):
+            self.sub_type = Subdivisions.Type.SECTION
+        elif subdivisions_str.startswith('¶'):
+            self.sub_type = Subdivisions.Type.PARAGRAPH
+        else:
+            self.sub_type = Subdivisions.Type.PAGE
+
+        if self.sub_type == Subdivisions.Type.PAGE:
+            self._add_range(Subdivisions.SECTION_RE.search(subdivisions_str))
+        else:
+            for match in Subdivisions.SECTION_RE.finditer(subdivisions_str):
+                self._add_range(match)
+
+    def _add_range(self, match):
+        start = match.group('start').strip().replace(',', '')
+        if match.group('end') is None:
+            self.ranges.append((start, None))
+        else:
+            end = match.group('end').strip().replace(',', '')
+            if len(end) < len(start):
+                end = start[:-len(end)] + end
+            self.ranges.append((start, end))
 
 class Citation(object):
-    def __init__(self, citation, source):
+    def __init__(self, citation, volume, source, subdivisions_str):
         self.citation = citation
+        self.volume = volume
         self.source = source
+        if subdivisions_str is not None:
+            self.subdivisions = Subdivisions(subdivisions_str)
+        else:
+            self.subdivisions = None
 
     def __str__(self):
         return 'Citation: {}'.format(self.citation)

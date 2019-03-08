@@ -59,6 +59,8 @@ with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.j
     reporters.remove('Tex.L.Rev.')
     reporters.remove('TexasL.Rev.')
 
+    reporters_noperiods=set(r.replace('.', '') for r in reporters)
+
     print("Found {} reporter abbreviations.".format(len(reporters)))
 
 with Docx(args.docx) as docx:
@@ -98,21 +100,18 @@ with Docx(args.docx) as docx:
 
             if match.source in ['USC', 'U.S.C.']:
                 section_range = r'[0-9]+([-–—][0-9]+)?'
-                re_match = re.match(r'(?P<title>[0-9]+) U\.? ?S\.? ?C\.? (§§? )?(?P<sections>({s}, )*{s})'.format(s=section_range), citation_text)
                 if re_match:
-                    title = int(re_match.group('title'))
-                    sections = re_match.group('sections')
-                    print('USC cite: {} {}'.format(title, sections))
-                    if sections.isdigit():
-                        pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, sections, urlencode({
-                            'link-type': 'pdf',
-                            'type': 'usc',
-                            'year': config['govinfo']['uscode_year'],
-                        }))
+                    title = match.volume
+                    section = match.subdivisions[0][0]
+                    pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, sections, urlencode({
+                        'link-type': 'pdf',
+                        'type': 'usc',
+                        'year': config['govinfo']['uscode_year'],
+                    }))
 
             if (match.source in ['U.S.', 'Stat.']
                     or citation_type == 'Congress'
-                    or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source)):
+                    or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source))):
                 pull_info.notes = 'https://heinonline.org/HOL/OneBoxCitation?{}'.format(urlencode({ 'cit_string': citation_text }))
 
             if match.source in ['Fed.Reg.', 'F.R.']:
