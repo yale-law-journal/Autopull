@@ -7,6 +7,7 @@ import re
 import sys
 from urllib.parse import urlencode
 
+from footnotes.config import CONFIG
 from footnotes.footnotes import Docx
 from footnotes.parsing import abbreviations, Parseable
 from footnotes.spreadsheet import Spreadsheet
@@ -90,16 +91,15 @@ with Docx(args.docx) as docx:
             elif match.source == 'Stat.':
                 citation_type = 'Statute'
 
-            if match.source in ['USC', 'U.S.C.']:
+            if match.source in ['USC', 'U.S.C.'] and match.subdivisions.ranges:
                 section_range = r'[0-9]+([-–—][0-9]+)?'
-                if re_match:
-                    title = match.volume
-                    section = match.subdivisions[0][0]
-                    pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, sections, urlencode({
-                        'link-type': 'pdf',
-                        'type': 'usc',
-                        'year': config['govinfo']['uscode_year'],
-                    }))
+                title = match.volume
+                section = match.subdivisions.ranges[0][0]
+                pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, section, urlencode({
+                    'link-type': 'pdf',
+                    'type': 'usc',
+                    'year': CONFIG['govinfo']['uscode_year'],
+                })) 
 
             if (match.source in ['U.S.', 'Stat.']
                     or citation_type == 'Congress'
@@ -114,12 +114,11 @@ with Docx(args.docx) as docx:
                     'link-type': 'pdf',
                 }))
 
-            if citation_type == 'Case':
-                if not pull_info.notes:
-                    pull_info.notes = 'https://1.next.westlaw.com/Search/Results.html?{}'.format(urlencode({
-                        'query': citation_text,
-                        'jurisdiction': 'ALLCASES',
-                    }))
+            if citation_type == 'Case' and not pull_info.notes:
+                pull_info.notes = 'https://1.next.westlaw.com/Search/Results.html?{}'.format(urlencode({
+                    'query': citation_text,
+                    'jurisdiction': 'ALLCASES',
+                }))
 
             pull_info.source = str(match.citation).strip()
             pull_info.citation_type = citation_type
