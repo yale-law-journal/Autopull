@@ -6,12 +6,28 @@ import re
 
 from .text import Range, TextRef
 
-with open(join(dirname(__file__), 'abbreviations.txt')) as f:
-    abbreviations = set((a.strip() for a in f if a.endswith('.\n')))
+with open(join(dirname(__file__), 'abbreviations.txt'), encoding='utf-8') as f:
+    def generate_abbreviations():
+        for line in f:
+            if line.startswith('#'): continue
+            line = line.strip().replace(',', '')
+            for word in line.split(' '):
+                if word and word.endswith('.'):
+                    yield word
+
+    abbreviations = set(generate_abbreviations())
     print("Found {} abbreviations.".format(len(abbreviations)))
 
+NORMALIZATIONS = {
+    '“': '"',
+    '”': '"',
+    '\u00A0': ' ',
+}
 def normalize(text):
-    return text.replace('“', '"').replace('”', '"').replace('\u00A0', ' ')
+    for sub_out, sub_in in NORMALIZATIONS.items():
+        text = text.replace(sub_out, sub_in)
+
+    return text
 
 def relative_offset(offsets, index, offset):
     return offset - (offsets[index - 1] if index > 0 else 0)
