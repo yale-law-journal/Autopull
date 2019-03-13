@@ -1,2 +1,2 @@
-%~dp0pull_spreadsheet %1
+"%~dp0pull_spreadsheet" %1
 pause
