@@ -1,6 +1,10 @@
 *.docx
 .DS_Store
 /footnotes/config.json
+~$*
+/build/
+/Add Perma Links.app/
+/Make Pull Spreadsheet.app/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

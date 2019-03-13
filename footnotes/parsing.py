@@ -291,11 +291,11 @@ class Subdivisions(object):
     def __init__(self, sub_type, ranges):
         self.sub_type = sub_type
         self.ranges = ranges
-        print(self)
+        # print(self)
 
     @staticmethod
     def from_str(subdivisions_str):
-        print(subdivisions_str)
+        # print(subdivisions_str)
         subdivisions_str = subdivisions_str.strip()
 
         if subdivisions_str.startswith('§'):
