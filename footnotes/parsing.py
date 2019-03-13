@@ -271,36 +271,97 @@ class Parseable(object):
         return Citation(sliced, volume, source, subdivisions)
 
 class Subdivisions(object):
+    """Parse Bluebook subdivision ranges."""
+
     Type = Enum('Type', 'PAGE SECTION PARAGRAPH')
 
-    SECTION = '[0-9][0-9a-zA-Z,]*(-[0-9](?![0-9]))?'
-    SUBSECTION = r'[\(\)a-z0-9]*'
-    SECTION_RE = re.compile(r'(^|[,§¶]) ?(?P<start>{sec}){sub}([-–—](?P<end>{sec}){sub})?( |$)'.format(sec=SECTION, sub=SUBSECTION))
+    # Some common sections look like ranges - for example, 42 USC 2000e-2 (meat of Title VII).
+    # So we have to be careful to avoid confusing the two.
+    DASHES = r'[-–—]'
+    TO = r' +to +'
+    SECTION_NODASH = r'[0-9][0-9a-zA-Z\.]*'
+    SECTION = SECTION_NODASH + '(-[0-9]+)*'
+    SUBSECTION = r'(\([a-z0-9]+\))+'
+    SECTIONS_GENERIC = r'{sec}({sub})?({range}({sec}|{sub}))?(, ?({sec}{sub}|{sec}|{sub})({range}({sec}|{sub}))?)*'
+    SECTIONS_DASH_RE = re.compile(SECTIONS_GENERIC.format(sec=SECTION, sub=SUBSECTION, range=TO))
+    SECTIONS_NODASH_RE = re.compile(SECTIONS_GENERIC.format(sec=SECTION_NODASH, sub=SUBSECTION, range=DASHES))
 
-    def __init__(self, subdivisions_str):
-        self.ranges = []
+    PAGES_RE = re.compile(r'[0-9]+|[ixv]+')
+
+    def __init__(self, sub_type, ranges):
+        self.sub_type = sub_type
+        self.ranges = ranges
+        print(self)
+
+    @staticmethod
+    def from_str(subdivisions_str):
+        print(subdivisions_str)
+        subdivisions_str = subdivisions_str.strip()
+
         if subdivisions_str.startswith('§'):
-            self.sub_type = Subdivisions.Type.SECTION
+            sub_type = Subdivisions.Type.SECTION
         elif subdivisions_str.startswith('¶'):
-            self.sub_type = Subdivisions.Type.PARAGRAPH
+            sub_type = Subdivisions.Type.PARAGRAPH
         else:
-            self.sub_type = Subdivisions.Type.PAGE
+            sub_type = Subdivisions.Type.PAGE
 
-        if self.sub_type == Subdivisions.Type.PAGE:
-            self._add_range(Subdivisions.SECTION_RE.search(subdivisions_str))
+        if sub_type == Subdivisions.Type.PAGE:
+            page = Subdivisions.PAGES_RE.match(subdivisions_str.strip())
+            if page:
+                return Subdivisions(sub_type, [(page.group(0), None)])
         else:
-            for match in Subdivisions.SECTION_RE.finditer(subdivisions_str):
-                self._add_range(match)
+            clean = subdivisions_str.replace('§', '').strip()
+            match_dash = Subdivisions.SECTIONS_DASH_RE.match(clean)
+            match_nodash = Subdivisions.SECTIONS_NODASH_RE.match(clean)
+            if match_nodash:
+                dash = False
+                separator = Subdivisions.DASHES
+                ranges = match_nodash.group(0)
+            elif match_dash:
+                dash = True
+                separator = Subdivisions.TO
+                ranges = match_dash.group(0)
+            else:
+                return Subdivisions(sub_type, [])
 
-    def _add_range(self, match):
-        start = match.group('start').strip().replace(',', '')
-        if match.group('end') is None:
-            self.ranges.append((start, None))
-        else:
-            end = match.group('end').strip().replace(',', '')
-            if len(end) < len(start):
-                end = start[:-len(end)] + end
-            self.ranges.append((start, end))
+            def generate_ranges():
+                split = (g.strip() for g in ranges.split(','))
+                prev_resolved = None
+                for group in split:
+                    elements = re.split(separator, group)
+                    if len(elements) == 1:
+                        low = elements[0]
+                        high = None
+                    else:
+                        low = elements[0]
+                        high = elements[1]
+
+                    if prev_resolved is not None and re.match(r'^[\.\(-]', low):
+                        # E.g.: 213(a)(15), (b)(21)
+                        first_char = low[0]
+                        context, _, _ = prev_resolved.partition(first_char)
+                        low = context + low
+
+                    if high is not None and high.isdigit() and len(high) < len(low):
+                        # E.g.: 306-07
+                        high = low[:-len(high)] + high
+                    elif high is not None and re.match(r'^[\.\(-]', high):
+                        # E.g.: 213(a)-(c)
+                        first_char = high[0]
+                        context, _, _ = low.partition(first_char)
+                        high = context + high
+
+                    yield (low, high)
+                    prev_resolved = low
+
+            return Subdivisions(sub_type, list(generate_ranges()))
+
+    def __str__(self):
+        range_list = ', '.join('{}-{}'.format(lo, hi) if hi is not None else lo for lo, hi in self.ranges)
+        return 'Subdivisions: {}'.format(range_list)
+
+    def __repr__(self):
+        return 'Subdivisions({!r}, {!r})'.format(self.sub_type, self.ranges)
 
 class Citation(object):
     def __init__(self, citation, volume, source, subdivisions_str):
@@ -308,7 +369,7 @@ class Citation(object):
         self.volume = volume
         self.source = source
         if subdivisions_str is not None:
-            self.subdivisions = Subdivisions(subdivisions_str)
+            self.subdivisions = Subdivisions.from_str(subdivisions_str)
         else:
             self.subdivisions = None
 
