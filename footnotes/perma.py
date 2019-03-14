@@ -41,7 +41,7 @@ async def make_permas_batch(session, urls, folder, result):
 
 async def make_permas_co(urls, folder):
     print('Making permas for {} URLs.'.format(len(urls)))
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
         if folder is None:
             folder = CONFIG['perma']['folder_id']
 
