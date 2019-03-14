@@ -1,7 +1,9 @@
 import aiohttp
 import asyncio
+import certifi
 import json
 from os.path import dirname, join
+import ssl
 import sys
 
 from .config import CONFIG
@@ -41,7 +43,10 @@ async def make_permas_batch(session, urls, folder, result):
 
 async def make_permas_co(urls, folder):
     print('Making permas for {} URLs.'.format(len(urls)))
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
+
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    connector = aiohttp.TCPConnector(ssl_context=ssl_context)
+    async with aiohttp.ClientSession(connector=connector) as session:
         if folder is None:
             folder = CONFIG['perma']['folder_id']
 
