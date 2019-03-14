@@ -1,5 +1,4 @@
 import argparse
-from collections import namedtuple
 from itertools import chain
 import json
 from os.path import basename, dirname, join
@@ -125,7 +124,10 @@ with Docx(args.docx) as docx:
 
             spreadsheet.append(pull_info.out_dict())
 
-            print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
+            try:
+                print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
+            except Exception:
+                pass
 
     in_name = basename(args.docx)
     if not in_name.endswith('.docx'):
