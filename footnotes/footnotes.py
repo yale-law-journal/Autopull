@@ -1,3 +1,4 @@
+from collections import defaultdict
 import itertools
 import lxml.etree as ET
 import zipfile
@@ -61,13 +62,14 @@ class Paragraph(object):
         return list(itertools.chain.from_iterable(r.text_refs() for r in self.runs))
 
 class Footnote(object):
-    def __init__(self, element):
+    def __init__(self, element, number):
         assert element.tag == ns('w', 'footnote')
         self.element = element
+        self.number = number
         self.paragraphs = [Paragraph(e) for e in self.element.findall('.//w:p', NS)]
 
-    def id(self):
-        """Footnote id. Should be the same as the number you see in the document."""
+    def internal_id(self):
+        """Internal id. Guaranteed to be unique, but not necessarily what you see in the document."""
 
         return int(self.element.get(ns('w', 'id')))
 
@@ -84,7 +86,12 @@ class FootnoteList(object):
         self.tree = tree
         self.root = tree.getroot()
 
-        self.footnotes = [Footnote(elem) for elem in self.root.findall('.//w:footnote', NS)]
+        footnote_elements = self.root.findall('.//w:footnote', NS)
+        refs = self.root.findall('.//w:footnoteRef', NS)
+        id_map = { ref: idx for idx, ref in enumerate(refs, start=1) }
+        id_map[None] = 0
+
+        self.footnotes = [Footnote(elem, id_map.get(elem.find('.//w:footnoteRef', NS))) for elem in footnote_elements]
         print("Found {} footnotes.".format(len(self.footnotes)))
 
     def __iter__(self):

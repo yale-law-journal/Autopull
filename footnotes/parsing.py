@@ -21,6 +21,7 @@ with open(join(dirname(__file__), 'abbreviations.txt'), encoding='utf-8') as f:
 NORMALIZATIONS = {
     '“': '"',
     '”': '"',
+    '’': '\'',
     '\u00A0': ' ',
 }
 def normalize(text):
@@ -40,13 +41,13 @@ class Parseable(object):
     SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
 
-    SOURCE_WORD = r'[A-Z][A-Za-z0-9\.]*'
+    SOURCE_WORD = '[A-Z][A-Za-z0-9\'\\.]*'
     CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>(?P<volume>[0-9]+) (?P<source>(& |{word} )*{word}) (§§? ?)?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
 
     XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
     OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
     SUPRA_RE = re.compile(r'supra note')
-    ID_RE = re.compile(r'^({signal} id\.|Id\.)( |$)'.format(signal=SIGNAL))
+    ID_RE = re.compile(r'^({signal} id\.|Id\.)([ ,]|$)'.format(signal=SIGNAL))
 
     CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
@@ -260,7 +261,7 @@ class Parseable(object):
         return False
 
     def citation(self):
-        match = Parseable.CITATION_RE.search(str(self))
+        match = Parseable.CITATION_RE.search(normalize(str(self)))
         if match is None:
             return None
 

@@ -60,7 +60,7 @@ with Docx(args.docx) as docx:
     spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
 
     for fn in footnotes:
-        if fn.id() <= 0: continue
+        if not fn.text().strip(): continue
 
         parsed = Parseable(fn.text_refs())
         citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
@@ -70,10 +70,12 @@ with Docx(args.docx) as docx:
                 # print('    skipping')
                 continue
 
-            pull_info = PullInfo(first_fn='{}.{}'.format(fn.id() - 2, idx + 1), second_fn=None, citation=str(sentence).strip())
+            pull_info = PullInfo(first_fn='{}.{}'.format(fn.number, idx + 1), second_fn=None, citation=str(sentence).strip())
+            pull_info.citation_type = 'Other'
 
             links = sentence.link_strs()
             if links:
+                pull_info.citation_type = 'Link'
                 pull_info.notes = links[0]
 
             match = sentence.citation()
@@ -82,15 +84,17 @@ with Docx(args.docx) as docx:
                 continue
 
             citation_text = str(match.citation)
-            citation_type = 'Other'
             if match.source in reporters:
-                citation_type = 'Case'
+                pull_info.citation_type = 'Case'
             elif match.source in ['Cong.Rec.', 'CongressionalRecord', 'Cong.Globe']:
-                citation_type = 'Congress'
+                pull_info.citation_type = 'Congress'
             elif match.source == 'Stat.':
-                citation_type = 'Statute'
+                pull_info.citation_type = 'Statute'
+            elif re.search(r'(L|J|Rev|REV)\.', match.source):
+                pull_info.citation_type = 'Journal'
 
             if match.source in ['USC', 'U.S.C.'] and match.subdivisions.ranges:
+                pull_info.citation_type = 'Code'
                 section_range = r'[0-9]+([-–—][0-9]+)?'
                 title = match.volume
                 section = match.subdivisions.ranges[0][0]
@@ -101,8 +105,8 @@ with Docx(args.docx) as docx:
                 })) 
 
             if (match.source in ['U.S.', 'Stat.']
-                    or citation_type == 'Congress'
-                    or (citation_type == 'Other' and re.search(r'L\.|J\.|Rev\.', match.source))):
+                    or pull_info.citation_type == 'Congress'
+                    or pull_info.citation_type == 'Journal'):
                 pull_info.notes = 'https://heinonline.org/HOL/OneBoxCitation?{}'.format(urlencode({ 'cit_string': citation_text }))
 
             if match.source in ['Fed.Reg.', 'F.R.']:
@@ -113,19 +117,18 @@ with Docx(args.docx) as docx:
                     'link-type': 'pdf',
                 }))
 
-            if citation_type == 'Case' and not pull_info.notes:
+            if pull_info.citation_type == 'Case' and not pull_info.notes:
                 pull_info.notes = 'https://1.next.westlaw.com/Search/Results.html?{}'.format(urlencode({
                     'query': citation_text,
                     'jurisdiction': 'ALLCASES',
                 }))
 
             pull_info.source = str(match.citation).strip()
-            pull_info.citation_type = citation_type
 
             spreadsheet.append(pull_info.out_dict())
 
             try:
-                print('{} {} citation: {}'.format(fn.id(), citation_type, match.citation))
+                print('{} {} citation: {}'.format(fn.id(), pull_info.citation_type, match.citation))
             except Exception:
                 pass
 
