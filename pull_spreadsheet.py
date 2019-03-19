@@ -90,7 +90,7 @@ with Docx(args.docx) as docx:
                 pull_info.citation_type = 'Congress'
             elif match.source == 'Stat.':
                 pull_info.citation_type = 'Statute'
-            elif re.search(r'(L|J|Rev|REV)\.', match.source):
+            elif re.search(r'Law|Review|Journal|(|L|J|Rev|REV)\.', match.source):
                 pull_info.citation_type = 'Journal'
 
             if match.source in ['USC', 'U.S.C.'] and match.subdivisions.ranges:
@@ -127,13 +127,9 @@ with Docx(args.docx) as docx:
 
             spreadsheet.append(pull_info.out_dict())
 
-            try:
-                print('{} {} citation: {}'.format(fn.id(), pull_info.citation_type, match.citation))
-            except Exception:
-                pass
-
     in_name = basename(args.docx)
     if not in_name.endswith('.docx'):
         in_name += '.docx'
     out_name = 'Bookpull.{}.xlsx'.format(in_name[:-5])
     spreadsheet.write_xlsx_path(join(dirname(args.docx), out_name))
+    print('Finished. Output at {}.'.format(out_name))
