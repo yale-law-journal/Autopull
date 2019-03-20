@@ -1,4 +1,4 @@
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict
 import csv
 from xlsxwriter import Workbook
 
@@ -41,7 +41,7 @@ class Spreadsheet(object):
         with open(filename, 'w', newline='', encoding=encoding) as f:
             self.write_csv(f)
 
-    def write_xlsx_path(self, filename):
+    def write_xlsx_path(self, filename, extra_formatting=lambda x, y: None):
         workbook = Workbook(filename)
         worksheet = workbook.add_worksheet()
         bold = workbook.add_format({ 'bold': True })
@@ -67,5 +67,7 @@ class Spreadsheet(object):
                         worksheet.write_string(row_idx + 1, col_idx, text, column_formats[col_idx])
                     else:
                         worksheet.write(row_idx + 1, col_idx, text, column_formats[col_idx])
+
+        extra_formatting(workbook, worksheet)
 
         workbook.close()

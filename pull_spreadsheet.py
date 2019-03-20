@@ -133,5 +133,24 @@ with Docx(args.docx) as docx:
     if not in_name.endswith('.docx'):
         in_name += '.docx'
     out_name = 'Bookpull.{}.xlsx'.format(in_name[:-5])
-    spreadsheet.write_xlsx_path(join(dirname(args.docx), out_name))
+
+    def format(workbook, worksheet):
+        green = workbook.add_format()
+        green.set_bg_color('#d9ead3')
+        red = workbook.add_format()
+        red.set_bg_color('#e6b8af')
+        worksheet.conditional_format('F2:F1000', {
+            'type': 'text',
+            'criteria': 'containing',
+            'value': 'Y',
+            'format': green,
+        })
+        worksheet.conditional_format('F2:F1000', {
+            'type': 'text',
+            'criteria': 'containing',
+            'value': 'N',
+            'format': red,
+        })
+
+    spreadsheet.write_xlsx_path(join(dirname(args.docx), out_name), format)
     print('Finished. Output at {}.'.format(out_name))
