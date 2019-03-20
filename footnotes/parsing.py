@@ -282,7 +282,7 @@ class Subdivisions(object):
     TO = r' +to +'
     SECTION_NODASH = r'[0-9][0-9a-zA-Z\.]*'
     SECTION = SECTION_NODASH + '(-[0-9]+)*'
-    SUBSECTION = r'(\([a-z0-9]+\))+'
+    SUBSECTION = r'(\([A-Za-z0-9]+\))+'
     SECTIONS_GENERIC = r'{sec}({sub})?({range}({sec}|{sub}))?(, ?({sec}{sub}|{sec}|{sub})({range}({sec}|{sub}))?)*'
     SECTIONS_DASH_RE = re.compile(SECTIONS_GENERIC.format(sec=SECTION, sub=SUBSECTION, range=TO))
     SECTIONS_NODASH_RE = re.compile(SECTIONS_GENERIC.format(sec=SECTION_NODASH, sub=SUBSECTION, range=DASHES))

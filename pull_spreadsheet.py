@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from footnotes.config import CONFIG
 from footnotes.footnotes import Docx
-from footnotes.parsing import abbreviations, Parseable
+from footnotes.parsing import abbreviations, Parseable, Subdivisions
 from footnotes.spreadsheet import Spreadsheet
 
 parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
@@ -95,14 +95,16 @@ with Docx(args.docx) as docx:
 
             if match.source in ['USC', 'U.S.C.'] and match.subdivisions.ranges:
                 pull_info.citation_type = 'Code'
-                section_range = r'[0-9]+([-–—][0-9]+)?'
                 title = match.volume
-                section = match.subdivisions.ranges[0][0]
-                pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, section, urlencode({
-                    'link-type': 'pdf',
-                    'type': 'usc',
-                    'year': CONFIG['govinfo']['uscode_year'],
-                })) 
+                range_start = match.subdivisions.ranges[0][0]
+                start_match = re.match(Subdivisions.SECTION, range_start)
+                if start_match:
+                    section = start_match.group(0)
+                    pull_info.notes = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, section, urlencode({
+                        'link-type': 'pdf',
+                        'type': 'usc',
+                        'year': CONFIG['govinfo']['uscode_year'],
+                    }))
 
             if (match.source in ['U.S.', 'Stat.']
                     or pull_info.citation_type == 'Congress'
