@@ -15,7 +15,7 @@ BATCH_FILES = [
 DATA_FILES = [join('reporters-db', 'reporters_db', 'data', 'reporters.json')]
 
 BUILD_EXE_OPTIONS = {
-    'packages': ['lxml', 'aiohttp', 'asyncio', 'idna'],
+    'packages': ['lxml', 'aiohttp', 'asyncio', 'idna', 'certifi'],
     'excludes': ['tkinter'],
     'include_files': BATCH_FILES + [(f, f) for f in DATA_FILES] + [(f, join('lib', f)) for f in PACKAGE_FILES],
     'include_msvcr': True,
