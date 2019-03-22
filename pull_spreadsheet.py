@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from footnotes.config import CONFIG
 from footnotes.footnotes import Docx
-from footnotes.parsing import abbreviations, Parseable, Subdivisions
+from footnotes.parsing import abbreviations, CitationContext, Parseable, Subdivisions
 from footnotes.spreadsheet import Spreadsheet
 
 parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
@@ -59,7 +59,7 @@ with Docx(args.docx) as docx:
     footnotes = docx.footnote_list
     spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
 
-    hereinafters = []
+    citation_context = CitationContext()
     for fn in footnotes:
         if not fn.text().strip(): continue
 
@@ -67,7 +67,7 @@ with Docx(args.docx) as docx:
         citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
         for idx, sentence in enumerate(citation_sentences):
             # print(str(sentence).strip())
-            if not sentence.is_new_citation(hereinafters):
+            if not citation_context.is_new_citation(sentence):
                 # print('    skipping')
                 continue
 

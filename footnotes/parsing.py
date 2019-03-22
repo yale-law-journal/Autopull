@@ -44,14 +44,6 @@ class Parseable(object):
     SOURCE_WORD = '[A-Z][A-Za-z0-9\'\\.]*'
     CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>(?P<volume>[0-9]+) (?P<source>(& |{word} )*{word}) (§§? ?)?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
 
-    XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
-    OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
-    SUPRA_RE = re.compile(r'supra note')
-    ID_RE = re.compile(r'^({signal} id\.|Id\.)([ ,]|$)'.format(signal=SIGNAL))
-    HEREINAFTER_RE = re.compile(r'\[hereinafter (?P<hereinafter>[^\]]+)\]')
-
-    CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
-
     def __init__(self, text_refs):
         if len(text_refs) > 1:
             tr0 = text_refs[0]
@@ -234,41 +226,6 @@ class Parseable(object):
     def link_strs(self):
         return [str(r) for _, r in self.links()]
 
-    def is_new_citation(self, hereinafters=[]):
-        text = str(self).strip()
-
-        if Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
-            # print('  X-ref or repeated source.')
-            return False
-
-        for h in hereinafters:
-            if h in text:
-                return False
-
-        hereinafter_match = Parseable.HEREINAFTER_RE.search(text)
-        if hereinafter_match:
-            hereinafters.append(hereinafter_match.group('hereinafter'))
-
-        if Parseable.ID_RE.match(text) and '§' not in text:
-            return False
-
-        if not re.search(r'[0-9]', text):
-            return False
-
-        if Parseable.OPENING_SIGNAL_RE.match(text):
-            # print('  Opening signal!')
-            return True
-
-        if Parseable.CAPITAL_WORDS_RE.search(text):
-            # print('  Capital words!')
-            return True
-
-        if self.links():
-            # print('  Link!')
-            return True
-
-        return False
-
     def citation(self):
         match = Parseable.CITATION_RE.search(normalize(str(self)))
         if match is None:
@@ -388,3 +345,52 @@ class Citation(object):
 
     def __repr__(self):
         return 'Citation({!r})'.format(self.citation)
+
+class CitationContext(object):
+    SIGNAL = Parseable.SIGNAL
+    XREF_RE = re.compile(r'^({signal} )?([Ii]nfra|[Ss]upra)'.format(signal=SIGNAL))
+    OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
+    SUPRA_RE = re.compile(r'supra note')
+    ID_RE = re.compile(r'^({signal} id\.|[Ii]d\.)([ ,]|$)'.format(signal=SIGNAL))
+    HEREINAFTER_RE = re.compile(r'\[hereinafter (?P<hereinafter>[^\]]+)\]')
+
+    CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
+
+    def __init__(self):
+        self.hereinafters = []
+
+    def is_new_citation(self, citation):
+        text = str(citation).strip()
+
+        if '§' not in text:
+            # Check for duplicate sources, but not if this is a section-based source like U.S.C.
+            if (CitationContext.XREF_RE.match(text)
+                    or CitationContext.ID_RE.match(text)
+                    or CitationContext.SUPRA_RE.search(text)):
+                return False
+
+            for h in self.hereinafters:
+                if h in text:
+                    return False
+
+        hereinafter_match = CitationContext.HEREINAFTER_RE.search(text)
+        if hereinafter_match:
+            self.hereinafters.append(hereinafter_match.group('hereinafter'))
+
+        # Anything with no numbers is definitely not a citation.
+        if not re.search(r'[0-9]', text):
+            return False
+
+        # If there's an opening citation, it's definitely a citation.
+        if CitationContext.OPENING_SIGNAL_RE.match(text):
+            return True
+
+        # Heuristic: if there are capital words that look like a title, this is a citation.
+        if CitationContext.CAPITAL_WORDS_RE.search(text):
+            return True
+
+        # If there is a link, it's a citation.
+        if citation.links():
+            return True
+
+        return False
