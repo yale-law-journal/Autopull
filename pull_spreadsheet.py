@@ -59,6 +59,7 @@ with Docx(args.docx) as docx:
     footnotes = docx.footnote_list
     spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
 
+    hereinafters = []
     for fn in footnotes:
         if not fn.text().strip(): continue
 
@@ -66,7 +67,7 @@ with Docx(args.docx) as docx:
         citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
         for idx, sentence in enumerate(citation_sentences):
             # print(str(sentence).strip())
-            if not sentence.is_new_citation():
+            if not sentence.is_new_citation(hereinafters):
                 # print('    skipping')
                 continue
 
@@ -106,10 +107,13 @@ with Docx(args.docx) as docx:
                         'year': CONFIG['govinfo']['uscode_year'],
                     }))
 
-            if (match.source in ['U.S.', 'Stat.']
-                    or pull_info.citation_type == 'Congress'
-                    or pull_info.citation_type == 'Journal'):
+            if pull_info.citation_type in ['Congress', 'Journal', 'Statute']:
                 pull_info.notes = 'https://heinonline.org/HOL/OneBoxCitation?{}'.format(urlencode({ 'cit_string': citation_text }))
+
+            if match.source == 'U.S.':
+                pull_info.notes = 'https://cdn.loc.gov/service/ll/usrep/usrep{volume:03d}/usrep{volume:03d}{page:03d}/usrep{volume:03d}{page:03d}.pdf'.format(
+                    volume=match.volume, page=int(match.subdivisions.ranges[0][0])
+                )
 
             if match.source in ['Fed.Reg.', 'F.R.']:
                 re_match = re.match(r'(?P<volume>[0-9]+) (F\. ?R\.|Fed\. ?Reg\.) (?P<page>[0-9,]+)', citation_text)

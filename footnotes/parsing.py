@@ -48,6 +48,7 @@ class Parseable(object):
     OPENING_SIGNAL_RE = re.compile(r'^{signal} [A-Z]'.format(signal=SIGNAL))
     SUPRA_RE = re.compile(r'supra note')
     ID_RE = re.compile(r'^({signal} id\.|Id\.)([ ,]|$)'.format(signal=SIGNAL))
+    HEREINAFTER_RE = re.compile(r'\[hereinafter (?P<hereinafter>[^\]]+)\]')
 
     CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
@@ -233,12 +234,20 @@ class Parseable(object):
     def link_strs(self):
         return [str(r) for _, r in self.links()]
 
-    def is_new_citation(self):
+    def is_new_citation(self, hereinafters=[]):
         text = str(self).strip()
 
         if Parseable.XREF_RE.match(text) or Parseable.SUPRA_RE.search(text):
             # print('  X-ref or repeated source.')
             return False
+
+        for h in hereinafters:
+            if h in text:
+                return False
+
+        hereinafter_match = Parseable.HEREINAFTER_RE.search(text)
+        if hereinafter_match:
+            hereinafters.append(hereinafter_match.group('hereinafter'))
 
         if Parseable.ID_RE.match(text) and '§' not in text:
             return False
