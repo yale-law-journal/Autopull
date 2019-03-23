@@ -42,7 +42,7 @@ class Parseable(object):
     SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
 
-    SOURCE_WORD = '[A-Z][A-Za-z0-9\'\\.]*'
+    SOURCE_WORD = '[A-Z0-9][A-Za-z0-9\'\\.]*'
     CITATION_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )(?P<cite>(?P<volume>[0-9]+) (?P<source>(& |{word} )*{word}) (§§? ?)?[0-9,]*[0-9])'.format(word=SOURCE_WORD, signal=SIGNAL))
 
     def __init__(self, text_refs):
