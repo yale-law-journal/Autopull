@@ -4,6 +4,7 @@ import itertools
 from os.path import dirname, join
 import re
 
+from .formatting import extend_front_if_formatted
 from .text import Range, TextRef
 
 with open(join(dirname(__file__), 'abbreviations.txt'), encoding='utf-8') as f:
@@ -231,11 +232,11 @@ class Parseable(object):
         if match is None:
             return None
 
-        sliced = self[Range.from_match(match, 'cite').slice()]
         volume = int(match.group('volume').strip())
-        source = match.group('source').strip().replace(' ', '')
+        original_source = match.group('source').strip()
+        source = original_source.replace(' ', '')
         subdivisions = str(self)[match.end('source'):].strip()
-        return Citation(sliced, volume, source, subdivisions)
+        return Citation(self, Range.from_match(match, 'cite'), volume, original_source, source, subdivisions)
 
 class Subdivisions(object):
     """Parse Bluebook subdivision ranges."""
@@ -331,9 +332,14 @@ class Subdivisions(object):
         return 'Subdivisions({!r}, {!r})'.format(self.sub_type, self.ranges)
 
 class Citation(object):
-    def __init__(self, citation, volume, source, subdivisions_str):
-        self.citation = citation
+    TITLE_RE = re.compile(r'(^|, )(?P<title>[^,]+), ?$')
+
+    def __init__(self, full, citation_range, volume, original_source, source, subdivisions_str):
+        self.full = full
+        self.citation_range = citation_range
+        self.citation = full[citation_range.slice()]
         self.volume = volume
+        self.original_source = original_source
         self.source = source
         if subdivisions_str is not None:
             self.subdivisions = Subdivisions.from_str(subdivisions_str)
@@ -345,6 +351,15 @@ class Citation(object):
 
     def __repr__(self):
         return 'Citation({!r})'.format(self.citation)
+
+    def find_title(self):
+        pre_citation = normalize(str(self.full)[:self.citation_range.i])
+        match = Citation.TITLE_RE.search(pre_citation)
+        if not match: return None
+
+        title_range = Range.from_match(match, 'title')
+        title = self.full[title_range.slice()]
+        return extend_front_if_formatted(title)
 
 class CitationContext(object):
     SIGNAL = Parseable.SIGNAL
@@ -360,7 +375,10 @@ class CitationContext(object):
         self.hereinafters = []
 
     def is_new_citation(self, citation):
-        text = str(citation).strip()
+        text = normalize(str(citation).strip())
+
+        if citation.citation():
+            return True
 
         if '§' not in text:
             # Check for duplicate sources, but not if this is a section-based source like U.S.C.

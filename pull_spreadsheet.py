@@ -1,18 +1,25 @@
+import aiohttp
+import asyncio
 import argparse
+import certifi
 from itertools import chain
 import json
+import mimetypes
 from os.path import basename, dirname, join
 import re
+import ssl
 import sys
 from urllib.parse import urlencode
+import zipfile
 
 from footnotes.config import CONFIG
 from footnotes.footnotes import Docx
-from footnotes.parsing import abbreviations, CitationContext, Parseable, Subdivisions
+from footnotes.parsing import abbreviations, CitationContext, normalize, Parseable, Subdivisions
 from footnotes.spreadsheet import Spreadsheet
 
 parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
 parser.add_argument('docx', help='Input Word file.')
+parser.add_argument('--pull', action='store_true', help='Attempt to pull sources.')
 
 args = parser.parse_args()
 
@@ -55,10 +62,34 @@ with open(join(sys.path[0], 'reporters-db', 'reporters_db', 'data', 'reporters.j
 
     print("Found {} reporter abbreviations.".format(len(reporters)))
 
-with Docx(args.docx) as docx:
-    footnotes = docx.footnote_list
-    spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
+def short_title(title):
+    return re.sub(r'[^A-Za-z0-9]', '', ''.join(title.split(' ')[:6]))[:30]
 
+async def download_file_zip(zipf, session, url, name, pull_info):
+    # print('Downloading [{}] -> [{}]...'.format(url, name))
+    buf = bytearray()
+    try:
+        async with session.get(url) as response:
+            if response.status not in [200, 201]:
+                return
+
+            async for data, _ in response.content.iter_chunks():
+                buf += data
+
+            if 'octet-stream' not in response.content_type:
+                extension = mimetypes.guess_extension(response.content_type)
+                if not name.endswith(extension):
+                    name += extension
+
+        with zipf.open(zipfile_name[:-4] + '/' + name, 'w') as f:
+            f.write(buf)
+
+        pull_info.pulled = 'Y'
+    except Exception: pass
+
+async def process_footnotes(footnotes, zipf=None, session=None):
+    pull_infos = []
+    downloads = []
     citation_context = CitationContext()
     for fn in footnotes:
         if not fn.text().strip(): continue
@@ -66,12 +97,13 @@ with Docx(args.docx) as docx:
         parsed = Parseable(fn.text_refs())
         citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
         for idx, sentence in enumerate(citation_sentences):
-            # print(str(sentence).strip())
+            # print('Sentence:', str(sentence).strip())
             if not citation_context.is_new_citation(sentence):
                 # print('    skipping')
                 continue
 
             pull_info = PullInfo(first_fn='{}.{}'.format(fn.number, idx + 1), second_fn=None, citation=str(sentence).strip())
+            pull_infos.append(pull_info)
             pull_info.citation_type = 'Other'
 
             links = sentence.link_strs()
@@ -80,18 +112,16 @@ with Docx(args.docx) as docx:
                 pull_info.notes = links[0]
 
             match = sentence.citation()
-            if not match:
-                spreadsheet.append(pull_info.out_dict())
-                continue
+            if not match: continue
 
-            citation_text = str(match.citation)
+            citation_text = normalize(str(match.citation))
             if match.source in reporters:
                 pull_info.citation_type = 'Case'
             elif match.source in ['Cong.Rec.', 'CongressionalRecord', 'Cong.Globe']:
                 pull_info.citation_type = 'Congress'
             elif match.source == 'Stat.':
                 pull_info.citation_type = 'Statute'
-            elif re.search(r'Law|Review|Journal|(|L|J|Rev|REV)\.', match.source):
+            elif re.search(r'Law|Review|Journal|(L|J|Rev|REV)\.', match.source):
                 pull_info.citation_type = 'Journal'
 
             if match.source in ['USC', 'U.S.C.'] and match.subdivisions.ranges:
@@ -131,12 +161,16 @@ with Docx(args.docx) as docx:
 
             pull_info.source = str(match.citation).strip()
 
-            spreadsheet.append(pull_info.out_dict())
-
-    in_name = basename(args.docx)
-    if not in_name.endswith('.docx'):
-        in_name += '.docx'
-    out_name = 'Bookpull.{}.xlsx'.format(in_name[:-5])
+            if zipf is not None:
+                short_citation = re.sub(r'[^A-Za-z0-9]', '', pull_info.source)
+                if pull_info.citation_type == 'Journal':
+                    title = normalize(str(match.find_title()))
+                    url = CONFIG['pdfapi']['url'] + '/api/articles/{}/{}/{}'.format(match.original_source, match.volume, title)
+                    name = '{}.{}.{}'.format(pull_info.first_fn, short_citation, short_title(title))
+                    downloads.append(download_file_zip(zipf, session, url, name, pull_info))
+                elif pull_info.notes and 'westlaw' not in pull_info.notes and 'heinonline' not in pull_info.notes:
+                    name = '{}.{}'.format(pull_info.first_fn, short_citation)
+                    downloads.append(download_file_zip(zipf, session, pull_info.notes, name, pull_info))
 
     def format(workbook, worksheet):
         green = workbook.add_format()
@@ -156,5 +190,43 @@ with Docx(args.docx) as docx:
             'format': red,
         })
 
-    spreadsheet.write_xlsx_path(join(dirname(args.docx), out_name), format)
-    print('Finished. Output at {}.'.format(out_name))
+    if zipf:
+        print('Waiting for downloads to complete...')
+        try:
+            await asyncio.wait_for(asyncio.shield(asyncio.gather(*downloads)), 60)
+        except asyncio.TimeoutError: pass
+
+        num_success = len([pi for pi in pull_infos if pi.pulled == 'Y'])
+        print('Successfully pulled {} out of {} sources.'.format(num_success, len(pull_infos)))
+        print('Sources pulled at {}.'.format(zipfile_name))
+
+    spreadsheet = Spreadsheet(columns=['First FN', 'Second FN', 'Citation', 'Type', 'Source', 'Pulled', 'Puller', 'Notes'])
+
+    for pull_info in pull_infos:
+        spreadsheet.append(pull_info.out_dict())
+
+    spreadsheet.write_xlsx_path(join(dirname(args.docx), spreadsheet_name), format)
+
+    print('Finished. Spreadsheet at {}.'.format(spreadsheet_name))
+
+async def pull():
+    if args.pull:
+        with zipfile.ZipFile(zipfile_name, 'w') as zipf:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl_context=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                await process_footnotes(footnotes, zipf, session)
+    else:
+        await process_footnotes(footnotes)
+
+in_name = basename(args.docx)
+if not in_name.endswith('.docx'):
+    in_name += '.docx'
+spreadsheet_name = 'Bookpull.{}.xlsx'.format(in_name[:-5])
+zipfile_name = 'BookpullSources.{}.zip'.format(in_name[:-5])
+
+with Docx(args.docx) as docx:
+    footnotes = docx.footnote_list
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(pull())

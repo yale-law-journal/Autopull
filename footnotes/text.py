@@ -1,3 +1,4 @@
+from collections import defaultdict
 from enum import Enum
 import re
 
@@ -75,26 +76,23 @@ class Insertion(object):
         else:
             self.element.tail = s
 
-    def apply(self):
-        self._set_fulltext(_str_insert(self._fulltext(), self.offset, self.s))
+    def apply(self, additional_offset=0):
+        self._set_fulltext(_str_insert(self._fulltext(), self.offset + additional_offset, self.s))
 
     @staticmethod
     def apply_all(insertions):
         # First, group by element and location. Multiple insertions to the same element disrupt offset math.
-        grouped = {}
+        grouped = defaultdict(lambda: [])
         for i in insertions:
             key = i.element, i.location
-            if key in grouped:
-                grouped[key].append(i)
-            else:
-                grouped[key] = [i]
+            grouped[key].append(i)
 
         for key, group in grouped.items():
-            if len(group) == 1:
-                group[0].apply()
-            else:
-                # raise NotImplementedError()
-                group[0].apply()
+            group.sort(key=lambda i: i.offset)
+            accumulated_offset = 0
+            for i in group:
+                i.apply(accumulated_offset)
+                accumulated_offset += len(i.s)
 
 class TextRef(object):
     """A slice of the text/tail (`location`) of `element`."""
