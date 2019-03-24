@@ -79,8 +79,8 @@ def short_title(title):
 
 # These links work if they don't return 404.
 # Unfortunately, some news orgs don't return 404 when accessing invalid link.
-WHITELIST = ['nytimes.com/', 'npr.org/', 'vox.com/']
-async def download_file_check(session, url):
+WHITELIST = ['nytimes.com/', 'npr.org/', 'vox.com/', 'whitehouse.gov/', 'cnn.com/']
+async def download_file_check(session, url, pull_info):
     try:
         async with session.head(url, allow_redirects=True) as response:
             dprint('Checking link [{}]: {}'.format(url, response.content_type))
@@ -241,7 +241,7 @@ async def process_footnotes(footnotes, zipf=None, session=None):
                     and 'westlaw.com' not in pull_info.human_link
                     and 'heinonline.org' not in pull_info.human_link):
                 # Try to download and mark as "pulled" if it's a PDF.
-                downloads.append(download_file_check(session, pull_info.human_link))
+                downloads.append(download_file_check(session, pull_info.human_link, pull_info))
 
     def format(workbook, worksheet):
         green = workbook.add_format()
