@@ -24,6 +24,8 @@ NORMALIZATIONS = {
     '”': '"',
     '’': '\'',
     '\u00A0': ' ',
+    '–': '-',
+    '—': '-',
 }
 def normalize(text):
     for sub_out, sub_in in NORMALIZATIONS.items():
