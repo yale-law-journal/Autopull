@@ -123,7 +123,7 @@ async def process_footnotes(footnotes, zipf=None, session=None):
         citation_sentences = parsed.citation_sentences(abbreviations | reporters_spaces)
         for idx, sentence in enumerate(citation_sentences):
             dprint('Sentence:', str(sentence).strip())
-            if not citation_context.is_new_citation(sentence):
+            if not citation_context.is_new_citation(sentence, reporters=reporters):
                 # print('    skipping')
                 continue
 
@@ -272,7 +272,8 @@ async def process_footnotes(footnotes, zipf=None, session=None):
         print('Waiting for downloads to complete...')
         try:
             await asyncio.wait_for(asyncio.gather(*downloads), 120)
-        except (asyncio.TimeoutError, TimeoutError): pass
+        except (asyncio.TimeoutError, TimeoutError):
+            print('Timed out.')
 
         num_success = len([pi for pi in pull_infos if 'Y' in pi.pulled or 'works' in pi.pulled])
         print('Successfully pulled {} out of {} total sources.'.format(num_success, len(pull_infos)))

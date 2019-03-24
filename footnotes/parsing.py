@@ -192,7 +192,9 @@ class Parseable(object):
                 paren_depth = last.count('(') - last.count(')')
                 bracket_depth = last.count('[') - last.count(']')
                 quote_depth = last.count('"') % 2
-                if (last_word in abbreviations
+                if re.match(Parseable.SIGNAL_UPPER, addition):
+                    compacted.append(candidate)
+                elif (last_word in abbreviations
                         or addition in abbreviations
                         or (next_word in abbreviations and following in abbreviations)
                         or not addition[0].isupper()
@@ -230,8 +232,15 @@ class Parseable(object):
         return [str(r) for _, r in self.links()]
 
     def citation(self):
-        match = Parseable.CITATION_RE.search(normalize(str(self)))
+        text = normalize(str(self))
+        match = Parseable.CITATION_RE.search(text)
         if match is None:
+            return None
+
+        pre = text[0:match.start(0)]
+        paren_depth = pre.count('(') - pre.count(')')
+        if paren_depth > 0:
+            # Don't find citations in parentheses.
             return None
 
         volume = int(match.group('volume').strip())
@@ -373,10 +382,15 @@ class CitationContext(object):
 
     CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
+    SOURCE_WORD = Parseable.SOURCE_WORD
+    SHORT_CASE_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )[0-9]+ (?P<source>(& |{word} )*{word}) at ([0-9,]*[0-9])'.format(
+        word=SOURCE_WORD, signal=SIGNAL
+    ))
+
     def __init__(self):
         self.hereinafters = []
 
-    def is_new_citation(self, citation):
+    def is_new_citation(self, citation, reporters=set()):
         text = normalize(str(citation).strip())
 
         if citation.citation():
@@ -396,6 +410,10 @@ class CitationContext(object):
         hereinafter_match = CitationContext.HEREINAFTER_RE.search(text)
         if hereinafter_match:
             self.hereinafters.append(hereinafter_match.group('hereinafter'))
+
+        short_case_match = CitationContext.SHORT_CASE_RE.search(text)
+        if short_case_match and short_case_match.group('source').replace(' ', '') in reporters:
+            return False
 
         # Anything with no numbers is definitely not a citation.
         if not re.search(r'[0-9]', text):
