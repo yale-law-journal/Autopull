@@ -1,10 +1,13 @@
 *.docx
 .DS_Store
 /footnotes/config.json
+/footnotes/config_development.json
 ~$*
 /build/
 /Add Perma Links.app/
 /Make Pull Spreadsheet.app/
+Bookpull.*.xlsx
+BookpullSources.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
