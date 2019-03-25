@@ -8,6 +8,7 @@ import mimetypes
 from os.path import basename, dirname, join
 import re
 import ssl
+import string
 import sys
 from urllib.parse import urlencode
 import zipfile
@@ -19,14 +20,17 @@ from footnotes.spreadsheet import Spreadsheet
 
 parser = argparse.ArgumentParser(description='Create pull spreadsheet.')
 parser.add_argument('docx', help='Input Word file.')
-parser.add_argument('--pull', action='store_true', help='Attempt to pull sources.')
+parser.add_argument('--no-pull', action='store_true', help='Don\'t attempt to pull sources.')
 parser.add_argument('--debug', action='store_true', help='Debug output.')
 
 cli_args = parser.parse_args()
 
 def dprint(*args, **kwargs):
     if cli_args.debug:
-        print(*args, **kwargs)
+        try:
+            print(*args, **kwargs)
+        except UnicodeEncodeError:
+            pass  # print(*(filter(lambda c: c in string.printable, s) for s in args), **kwargs)
 
 class PullInfo(object):
     def __init__(self, first_fn, second_fn, citation, citation_type='',
@@ -289,8 +293,8 @@ async def process_footnotes(footnotes, zipf=None, session=None):
     print('Finished. Spreadsheet at {}.'.format(spreadsheet_name))
 
 async def pull():
-    if cli_args.pull:
-        with zipfile.ZipFile(zipfile_name, 'w') as zipf:
+    if not cli_args.no_pull:
+        with zipfile.ZipFile(join(dirname(cli_args.docx), zipfile_name), 'w') as zipf:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl_context=ssl_context, limit=300)
             async with aiohttp.ClientSession(connector=connector) as session:
