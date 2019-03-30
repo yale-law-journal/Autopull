@@ -225,7 +225,8 @@ async def process_footnotes(footnotes, zipf=None, session=None):
                     }))
 
                 pull_info.source = str(match.citation).strip()
-                pull_info.download_name = short_citation
+                if not pull_info.download_name:
+                    pull_info.download_name = short_citation
 
             if zipf is not None and pull_info.download_link:
                 if pull_info.download_name:
