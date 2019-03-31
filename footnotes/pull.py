@@ -75,9 +75,9 @@ def short_title(title):
 # These links work if they don't return 404.
 # Unfortunately, some news orgs don't return 404 when accessing invalid link.
 WHITELIST = ['nytimes.com/', 'npr.org/', 'vox.com/', 'whitehouse.gov/', 'cnn.com/']
-async def download_file_check(session, url, pull_info):
+async def download_file_check(context, url, pull_info):
     try:
-        async with session.head(url, allow_redirects=True) as response:
+        async with context.session.head(url, allow_redirects=True) as response:
             dprint('Checking link [{}]: {}'.format(url, response.content_type))
             if response.status in [200, 201]:
                 if (response.content_type == 'application/pdf'
@@ -85,10 +85,10 @@ async def download_file_check(session, url, pull_info):
                     pull_info.pulled = 'Link works'
     except Exception: pass
 
-async def download_file_zip(zipf, session, url, name, pull_info):
+async def download_file_zip(context, url, name, pull_info):
     buf = bytearray()
     try:
-        async with session.get(url) as response:
+        async with context.session.get(url) as response:
             dprint('{} downloading [{}] -> [{}]...'.format(response.status, url, name))
             if response.status not in [200, 201]:
                 return
@@ -101,17 +101,17 @@ async def download_file_zip(zipf, session, url, name, pull_info):
                 if not name.endswith(extension):
                     name += extension
 
-        with zipf.open(zipfile_name[:-4] + '/' + name, 'w') as f:
+        with context.zipf.open(context.zipfile_prefix + '/' + name, 'w') as f:
             f.write(buf)
 
         pull_info.pulled = 'Y'
     except Exception: pass
 
-async def pull(context):
+def pull(context):
     pull_infos = []
     downloads = []
     citation_context = CitationContext()
-    for fn in footnotes:
+    for fn in context.footnotes:
         if not fn.text().strip(): continue
 
         parsed = Parseable(fn.text_refs())
@@ -219,7 +219,7 @@ async def pull(context):
                 if not pull_info.download_name:
                     pull_info.download_name = short_citation
 
-            if zipf is not None and pull_info.download_link:
+            if context.zipf is not None and pull_info.download_link:
                 if pull_info.download_name:
                     name = '{}.{}'.format(pull_info.first_fn, pull_info.download_name)
                 elif pull_info.download_link.endswith('.pdf'):
@@ -228,16 +228,16 @@ async def pull(context):
                 else:
                     name = '{}'.format(pull_info.first_fn)
 
-                downloads.append(download_file_zip(zipf, session, pull_info.download_link, name, pull_info))
+                downloads.append(download_file_zip(context, pull_info.download_link, name, pull_info))
 
-            if (session is not None
+            if (context.session is not None
                     and pull_info.human_link
                     and not pull_info.download_link
                     and 'congressional.proquest.com' not in pull_info.human_link
                     and 'westlaw.com' not in pull_info.human_link
                     and 'heinonline.org' not in pull_info.human_link):
                 # Try to download and mark as "pulled" if it's a PDF.
-                downloads.append(download_file_check(session, pull_info.human_link, pull_info))
+                downloads.append(download_file_check(context, pull_info.human_link, pull_info))
 
     return downloads, pull_infos
 
@@ -285,12 +285,14 @@ def write_spreadsheet(pull_infos, spreadsheet_path):
 
     spreadsheet.write_xlsx_path(spreadsheet_path, format)
 
-    print('Finished. Spreadsheet at {}.'.format(spreadsheet_name))
+    print('Created spreadsheet at {}.'.format(basename(spreadsheet_path)))
 
 class PullContext(object):
-    def __init__(filename, zipfile_path=None):
+    def __init__(self, filename, zipfile_path=None):
         self.filename = filename
         self.zipfile_path = zipfile_path
+        zipfile_base = basename(zipfile_path)
+        self.zipfile_prefix = zipfile_base[:-4] if len(zipfile_base) > 4 else 'zip'
         self.zipf, self.session = None, None
 
         with Docx(filename) as docx:

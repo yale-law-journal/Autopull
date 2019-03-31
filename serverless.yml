@@ -7,29 +7,45 @@ service: autopull
 provider:
   name: aws
   runtime: python3.6
+  timeout: 180
+  memorySize: 1024
   iamRoleStatements:
-    - Effect: "Allow"
+    - Effect: Allow
       Action:
-        - "s3:HeadBucket"
-        - "s3:ListBucket"
-        - "s3:HeadObject"
-        - "s3:GetObject"
+        - s3:HeadBucket
       Resource:
-        - "arn:aws:s3:::autopull-uploads"
-        - "arn:aws:s3:::autopull-uploads/*"
-    - Effect: "Allow"
+        - "*"
+    - Effect: Allow
       Action:
-        - "s3:HeadBucket"
-        - "s3:ListBucket"
-        - "s3:HeadObject"
-        - "s3:GetObject"
-        - "s3:PutObject"
-        - "s3:AbortMultipartUpload"
-        - "s3:ListBucketMultipartUploads"
-        - "s3:ListMultipartUploadParts"
+        - s3:ListBucket
+        - s3:GetObject
       Resource:
-        - "arn:aws:s3:::autopull-results"
-        - "arn:aws:s3:::autopull-results/*"
+        - arn:aws:s3:::autopull-uploads
+        - arn:aws:s3:::autopull-uploads/*
+    - Effect: Allow
+      Action:
+        - s3:ListBucket
+        - s3:*Object
+        - s3:*ObjectAcl
+        - s3:AbortMultipartUpload
+        - s3:ListBucketMultipartUploads
+        - s3:ListMultipartUploadParts
+      Resource:
+        - "*"
+        # - arn:aws:s3:::autopull-results
+        # - arn:aws:s3:::autopull-results/*
+    - Effect: Allow
+      Action:
+        - sqs:ListQueues
+        - sqs:GetQueueUrl
+        - sqs:GetQueueAttributes
+        - sqs:ReceiveMessage
+        - sqs:SendMessage
+        - sqs:SendMessageBatch
+        - sqs:DeleteMessage
+        - sqs:DeleteMessageBatch
+      Resource:
+        - "*"
 
 resources:
   Resources:
@@ -64,6 +80,7 @@ package:
     - /*.xlsx
     - /*.pyc
     - footnotes/*.pyc
+    - footnotes/config_development.json
     - "**/__pycache__/**"
     - venv/**
   include:
