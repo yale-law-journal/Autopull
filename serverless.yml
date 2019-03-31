@@ -31,9 +31,8 @@ provider:
         - s3:ListBucketMultipartUploads
         - s3:ListMultipartUploadParts
       Resource:
-        - "*"
-        # - arn:aws:s3:::autopull-results
-        # - arn:aws:s3:::autopull-results/*
+        - arn:aws:s3:::autopull-results
+        - arn:aws:s3:::autopull-results/*
     - Effect: Allow
       Action:
         - sqs:ListQueues
@@ -108,16 +107,6 @@ functions:
           rules:
             - prefix: perma/
 
-#    The following are a few example events you can configure
-#    NOTE: Please make sure to change your handler code to work with those events
-#    Check the event documentation for details
-#    events:
-#      - http:
-#          path: users/create
-#          method: get
-#      - websocket: $connect
-#      - s3: ${env:BUCKET}
-
 plugins:
   - serverless-python-requirements
 
@@ -128,7 +117,3 @@ custom:
     dockerPip: true
     noDeploy:
       - lxml
-
-#    Define function environment variables here
-#    environment:
-#      variable2: value2
