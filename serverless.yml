@@ -1,0 +1,117 @@
+service: autopull
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: python3.6
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "s3:HeadBucket"
+        - "s3:ListBucket"
+        - "s3:HeadObject"
+        - "s3:GetObject"
+      Resource:
+        - "arn:aws:s3:::autopull-uploads"
+        - "arn:aws:s3:::autopull-uploads/*"
+    - Effect: "Allow"
+      Action:
+        - "s3:HeadBucket"
+        - "s3:ListBucket"
+        - "s3:HeadObject"
+        - "s3:GetObject"
+        - "s3:PutObject"
+        - "s3:AbortMultipartUpload"
+        - "s3:ListBucketMultipartUploads"
+        - "s3:ListMultipartUploadParts"
+      Resource:
+        - "arn:aws:s3:::autopull-results"
+        - "arn:aws:s3:::autopull-results/*"
+
+resources:
+  Resources:
+    S3BucketAutopulluploads:
+      Type: AWS::S3::Bucket
+      Properties:
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+    S3BucketAutopullresults:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: autopull-results
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+
+
+# you can add packaging information here
+package:
+  exclude:
+    - dist/**
+    - apps/**
+    - test/**
+    - build/**
+    - node_modules/**
+    - /*.docx
+    - /*.xlsx
+    - /*.pyc
+    - footnotes/*.pyc
+    - "**/__pycache__/**"
+    - venv/**
+  include:
+    - /*.py
+    - footnotes/*.py
+    - footnotes/abbreviations.txt
+    - footnotes/config.json
+    - reporters-db/reporters_db/data/reporters.json
+
+functions:
+  makePullSpreadsheet:
+    handler: handler.pull
+    events:
+      - s3:
+          bucket: autopull-uploads
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: pull/
+  applyPermaLinks:
+    handler: handler.perma
+    events:
+      - s3:
+          bucket: autopull-uploads
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: perma/
+
+#    The following are a few example events you can configure
+#    NOTE: Please make sure to change your handler code to work with those events
+#    Check the event documentation for details
+#    events:
+#      - http:
+#          path: users/create
+#          method: get
+#      - websocket: $connect
+#      - s3: ${env:BUCKET}
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    useDownloadCache: true
+    useStaticCache: true
+    dockerPip: true
+    noDeploy:
+      - lxml
+
+#    Define function environment variables here
+#    environment:
+#      variable2: value2

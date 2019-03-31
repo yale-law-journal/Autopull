@@ -119,15 +119,15 @@ class FootnoteList(object):
             style.getparent().remove(style)
 
 class Docx(object):
-    def __init__(self, filename, mode='r'):
-        self.filename = filename
+    def __init__(self, file_or_name, mode='r'):
+        self.file_or_name = file_or_name
         self.mode = mode
         self.zipf = None
         self.footnotes_xml = None
         self.footnote_list = None
 
     def __enter__(self):
-        self.zipf = zipfile.ZipFile(self.filename)
+        self.zipf = zipfile.ZipFile(self.file_or_name)
         self.footnotes_xml = self.zipf.open('word/footnotes.xml', self.mode)
         self.footnote_list = FootnoteList.from_file(self.footnotes_xml)
 
