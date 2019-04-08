@@ -94,7 +94,7 @@ def apply_docx(docx):
     footnotes = docx.footnote_list
     urls = collect_urls(footnotes)
 
-    make_permas(urls, permas)
+    permas = make_permas(urls)
     insertions = generate_insertions(urls, permas)
 
     print('Applying insertions.')
