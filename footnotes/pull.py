@@ -327,7 +327,7 @@ async def pull_local_co(filename, pull_sources=True):
         downloads, pull_infos = pull(context)
         await await_downloads(downloads, pull_infos)
         print('Sources pulled at {}.'.format(zipfile_name))
-        write_spreadsheet(pull_infos, spreadsheet_name)
+        write_spreadsheet(pull_infos, spreadsheet_path)
 
 def pull_local(filename, pull_sources=True):
     loop = asyncio.get_event_loop()
