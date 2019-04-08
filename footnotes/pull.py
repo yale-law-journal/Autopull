@@ -251,7 +251,6 @@ async def await_downloads(downloads, pull_infos):
 
     num_success = len([pi for pi in pull_infos if 'Y' in pi.pulled or 'works' in pi.pulled])
     print('Successfully pulled {} out of {} total sources.'.format(num_success, len(pull_infos)))
-    print('Sources pulled at {}.'.format(zipfile_name))
 
 def write_spreadsheet(pull_infos, spreadsheet_path):
     def format(workbook, worksheet):
@@ -288,17 +287,19 @@ def write_spreadsheet(pull_infos, spreadsheet_path):
     print('Created spreadsheet at {}.'.format(basename(spreadsheet_path)))
 
 class PullContext(object):
-    def __init__(self, filename, zipfile_path=None):
+    def __init__(self, filename, zipfile_path=None, zipfile_prefix=None):
         self.filename = filename
         self.zipfile_path = zipfile_path
-        zipfile_base = basename(zipfile_path)
-        self.zipfile_prefix = zipfile_base[:-4] if len(zipfile_base) > 4 else 'zip'
+        self.zipfile_prefix = zipfile_prefix
+        if self.zipfile_prefix is None and self.zipfile_path is not None:
+            zipfile_base = basename(zipfile_path)
+            self.zipfile_prefix = zipfile_base[:-4] if len(zipfile_base) > 4 else 'zip'
         self.zipf, self.session = None, None
 
         with Docx(filename) as docx:
             self.footnotes = docx.footnote_list
 
-    def __enter__(self):
+    async def __aenter__(self):
         if self.zipfile_path:
             self.zipf = zipfile.ZipFile(self.zipfile_path, 'w').__enter__()
             ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -307,11 +308,10 @@ class PullContext(object):
 
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    async def __aexit__(self, exc_type, exc_value, traceback):
         if self.zipfile_path:
             self.zipf.close()
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.session.close())
+            await self.session.close()
 
 async def pull_local_co(filename, pull_sources=True):
     in_name = basename(filename)
@@ -323,10 +323,11 @@ async def pull_local_co(filename, pull_sources=True):
     zipfile_name = 'BookpullSources.{}.zip'.format(in_name[:-5])
     zipfile_path = join(dirname(filename), zipfile_name)
 
-    with PullContext(filename, zipfile_path if pull_sources else None) as context:
+    async with PullContext(filename, zipfile_path if pull_sources else None) as context:
         downloads, pull_infos = pull(context)
-        await await_downloads(downloads)
-        write_spreadsheet(pull_infos)
+        await await_downloads(downloads, pull_infos)
+        print('Sources pulled at {}.'.format(zipfile_name))
+        write_spreadsheet(pull_infos, spreadsheet_name)
 
 def pull_local(filename, pull_sources=True):
     loop = asyncio.get_event_loop()

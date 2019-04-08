@@ -15,7 +15,7 @@ from footnotes.text import Insertion
 # Download s3 object into ram.
 # Build zipfile and xlsx in /tmp.
 # Upload zipfile and xlsx to s3.
-def pull(event, context):
+async def pull_co(event, context):
     print(event)
     s3 = boto3.resource('s3')
     sqs = boto3.resource('sqs')
@@ -30,6 +30,7 @@ def pull(event, context):
 
     queue_url = bucket_object.metadata['queue-url']
     file_uuid = bucket_object.metadata['uuid']
+    job_id = bucket_object.metadata['job-id']
     original_name = bucket_object.metadata['original-name']
     if original_name.endswith('.docx'):
         original_name = original_name[:-5]
@@ -42,25 +43,26 @@ def pull(event, context):
     spreadsheet_path = join(tempfile.gettempdir(), file_uuid + '.xlsx')
     queue.send_message(MessageBody=json.dumps({
         'message': 'start',
+        'job_id': job_id,
         'file_uuid': file_uuid,
     }))
 
-    with PullContext(stream, zipfile_path) as context:
+    zipfile_name = 'Bookpull.{}'.format(original_name)
+
+    async with PullContext(stream, zipfile_path, zipfile_prefix=zipfile_name) as context:
         downloads, pull_infos = pull_sources(context)
         tasks = [asyncio.ensure_future(dl) for dl in downloads]
         total = len(tasks)
         pending = tasks
-        loop = asyncio.get_event_loop()
-        while len(pending) > 10:
+        while len(pending) > 5:
             queue.send_message(MessageBody=json.dumps({
                 'message': 'progress',
                 'progress': total - len(pending),
                 'total': total,
+                'job_id': job_id,
                 'file_uuid': file_uuid,
             }))
-            done, pending = loop.run_until_complete(asyncio.wait(pending, timeout=0.2))
-
-        loop.close()
+            done, pending = await asyncio.wait(pending, timeout=0.2)
 
         write_spreadsheet(pull_infos, spreadsheet_path)
         context.zipf.write(spreadsheet_path, '{}/0.Bookpull.{}.xlsx'.format(context.zipfile_prefix, original_name))
@@ -68,7 +70,7 @@ def pull(event, context):
 
     out_bucket = s3.Bucket('autopull-results')
     print('Uploading zip...')
-    bucket_zipfile_path = 'pull/{}/Bookpull.{}.zip'.format(file_uuid, original_name)
+    bucket_zipfile_path = 'pull/{}/{}.zip'.format(file_uuid, zipfile_name)
     out_bucket.upload_file(zipfile_path, bucket_zipfile_path, ExtraArgs={
         'ACL': 'public-read',
         'ContentType': 'application/zip',
@@ -77,9 +79,15 @@ def pull(event, context):
 
     queue.send_message(MessageBody=json.dumps({
         'message': 'complete',
-        'file_uuid': file_uuid,
         'result_url': 'https://s3.amazonaws.com/autopull-results/' + bucket_zipfile_path,
+        'queue_url': queue_url,
+        'job_id': job_id,
+        'file_uuid': file_uuid,
     }))
+
+def pull(event, context):
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(pull_co(event, context))
 
 def perma(event, context):
     print(event)

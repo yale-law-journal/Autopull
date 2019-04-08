@@ -197,7 +197,7 @@ class Parseable(object):
                 elif (last_word in abbreviations
                         or addition in abbreviations
                         or (next_word in abbreviations and following in abbreviations)
-                        or not addition[0].isupper()
+                        or (addition and not addition[0].isupper())
                         or paren_depth > 0
                         or bracket_depth > 0
                         or quote_depth > 0):
