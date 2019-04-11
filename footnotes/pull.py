@@ -171,7 +171,7 @@ def pull(context):
                         pull_info.human_link = 'https://www.govinfo.gov/link/uscode/{}/{}?{}'.format(title, section, urlencode({
                             'link-type': 'pdf',
                             'type': 'usc',
-                            'year': CONFIG['govinfo']['uscode_year'],
+                            # 'year': CONFIG['govinfo']['uscode_year'],
                         }))
                         pull_info.download_link = pull_info.human_link
 
