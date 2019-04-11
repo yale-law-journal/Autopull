@@ -92,7 +92,7 @@ def generate_insertions(urls, permas):
 PERMA_RE = re.compile(r'[^A-Za-z0-9]*(https?://)?perma.cc')
 def apply_docx(docx):
     footnotes = docx.footnote_list
-    urls = collect_urls(footnotes)
+    urls = list(collect_urls(footnotes))
 
     permas = make_permas(urls)
     insertions = generate_insertions(urls, permas)
