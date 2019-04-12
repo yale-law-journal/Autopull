@@ -26,6 +26,8 @@ NORMALIZATIONS = {
     '\u00A0': ' ',
     '–': '-',
     '—': '-',
+    '\u200C': '',
+    '\u200B': '',
 }
 def normalize(text):
     for sub_out, sub_in in NORMALIZATIONS.items():
@@ -39,7 +41,7 @@ def relative_offset(offsets, index, offset):
 class Parseable(object):
     Side = Enum('Side', 'LEFT RIGHT')
 
-    URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]+)[,;\.]?( |$)')
+    URL_RE = re.compile(r'(?P<url>(http|https|ftp)://[^ \)/]+[^ ]*[^ ,;\.])[,;\.]?( |$)')
 
     SIGNAL_UPPER = r'(See|See also|E.g.|Accord|Cf.|Contra|But see|But cf.|See generally|Compare)(, e.g.,)?'
     SIGNAL = r'({upper}|{lower})'.format(upper=SIGNAL_UPPER, lower=SIGNAL_UPPER.lower())
@@ -230,6 +232,9 @@ class Parseable(object):
 
     def link_strs(self):
         return [str(r) for _, r in self.links()]
+
+    def normalized(self):
+        return normalize(str(self))
 
     def citation(self):
         text = normalize(str(self))

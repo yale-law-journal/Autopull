@@ -43,17 +43,19 @@ async def make_permas_batch(session, urls, folder, result):
             # print('Status: {}; content type: {}.'.format(response.status, response.content_type))
             if response.status == 201 and response.content_type == 'application/json':
                 batch = await response.json()
-                # print(batch)
                 print('Batch finished.')
                 for job in batch['capture_jobs']:
-                    result[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
+                    if job['guid'] is None:
+                        print(job['message'])
+                    else:
+                        result[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
 
                 return
 
         print('Retrying...')
 
 def make_permas_progress(urls, permas, folder=None):
-    url_strs = [str(url) for url in urls]
+    url_strs = [url.normalized() for url in urls if '//perma.cc' not in url.normalized()]
     print('Making permas for {} URLs.'.format(len(url_strs)))
 
     ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -85,7 +87,7 @@ def collect_urls(footnotes):
 
 def generate_insertions(urls, permas):
     for url in urls:
-        url_str = str(url)
+        url_str = url.normalized()
         if url_str in permas:
             yield url.insert_after(' [{}]'.format(permas[url_str]))
 
@@ -95,6 +97,7 @@ def apply_docx(docx):
     urls = list(collect_urls(footnotes))
 
     permas = make_permas(urls)
+    # print(permas)
     insertions = generate_insertions(urls, permas)
 
     print('Applying insertions.')
