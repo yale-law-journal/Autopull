@@ -304,7 +304,7 @@ class PullContext(object):
             self.zipf = zipfile.ZipFile(self.zipfile_path, 'w').__enter__()
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl_context=ssl_context, limit=20)
-            self.session = aiohttp.ClientSession(connector=connector)
+            self.session = aiohttp.ClientSession(connector=connector, headers={ 'User-Agent': 'Autopull' })
 
         return self
 
