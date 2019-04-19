@@ -286,6 +286,11 @@ def write_spreadsheet(pull_infos, spreadsheet_path):
 
     print('Created spreadsheet at {}.'.format(basename(spreadsheet_path)))
 
+def add_pullers(pull_infos, pullers):
+    unpulled = [pi for pi in pull_infos if not pi.pulled]
+    for i, pull_info in enumerate(unpulled):
+        pull_info.puller = pullers[int(i * len(pullers) / len(unpulled))]
+
 class PullContext(object):
     def __init__(self, filename, zipfile_path=None, zipfile_prefix=None):
         self.filename = filename

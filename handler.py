@@ -5,17 +5,18 @@ import json
 import os
 from os.path import join
 import tempfile
+from urllib.parse import unquote
 
 from footnotes.footnotes import Docx
 from footnotes.perma import collect_urls, generate_insertions, make_permas_progress
-from footnotes.pull import pull as pull_sources, PullContext, write_spreadsheet
+from footnotes.pull import add_pullers, pull as pull_sources, PullContext, write_spreadsheet
 from footnotes.text import Insertion
 
 # Upload from s3 triggers event.
 # Download s3 object into ram.
 # Build zipfile and xlsx in /tmp.
 # Upload zipfile and xlsx to s3.
-async def pull_co(event, context):
+async def pull_co(event, lambda_context):
     print(event)
     s3 = boto3.resource('s3')
     sqs = boto3.resource('sqs')
@@ -32,6 +33,11 @@ async def pull_co(event, context):
     file_uuid = bucket_object.metadata['uuid']
     job_id = bucket_object.metadata['job-id']
     original_name = bucket_object.metadata['original-name']
+    pullers = None
+    if 'pullers' in bucket_object.metadata:
+        pullers_decoded = unquote(bucket_object.metadata['pullers']).splitlines()
+        pullers = [p for p in pullers_decoded if p]
+
     if original_name.endswith('.docx'):
         original_name = original_name[:-5]
 
@@ -54,7 +60,7 @@ async def pull_co(event, context):
         tasks = [asyncio.ensure_future(dl) for dl in downloads]
         total = len(tasks)
         pending = tasks
-        while len(pending) > 5:
+        while len(pending) > 5 and lambda_context.get_remaining_time_in_millis() > 10 * 1000:
             queue.send_message(MessageBody=json.dumps({
                 'message': 'progress',
                 'progress': total - len(pending),
@@ -63,6 +69,9 @@ async def pull_co(event, context):
                 'file_uuid': file_uuid,
             }))
             done, pending = await asyncio.wait(pending, timeout=0.2)
+
+        if pullers:
+            add_pullers(pull_infos, pullers)
 
         write_spreadsheet(pull_infos, spreadsheet_path)
         context.zipf.write(spreadsheet_path, '{}/0.Bookpull.{}.xlsx'.format(context.zipfile_prefix, original_name))
