@@ -70,6 +70,7 @@ resources:
 # you can add packaging information here
 package:
   exclude:
+    - .eggs/**
     - dist/**
     - apps/**
     - test/**
@@ -98,6 +99,9 @@ functions:
           event: s3:ObjectCreated:*
           rules:
             - prefix: pull/
+    layers:
+      - Ref: DepsLambdaLayer
+      - Ref: LxmlLambdaLayer
   applyPermaLinks:
     handler: handler.perma
     events:
@@ -106,14 +110,16 @@ functions:
           event: s3:ObjectCreated:*
           rules:
             - prefix: perma/
+    layers:
+      - Ref: DepsLambdaLayer
+      - Ref: LxmlLambdaLayer
 
-plugins:
-  - serverless-python-requirements
-
-custom:
-  pythonRequirements:
-    useDownloadCache: true
-    useStaticCache: true
-    dockerPip: true
-    noDeploy:
-      - lxml
+layers:
+  deps:
+    path: deps
+    compatibleRuntimes:
+      - python3.6
+  lxml:
+    path: lxml_layer
+    compatibleRuntimes:
+      - python3.6
