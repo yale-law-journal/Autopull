@@ -8,9 +8,78 @@ import tempfile
 from urllib.parse import unquote
 
 from footnotes.footnotes import Docx
-from footnotes.perma import collect_urls, generate_insertions, make_permas_progress
+from footnotes.perma import collect_urls, generate_insertions, make_permas_futures, PermaContext
 from footnotes.pull import add_pullers, pull as pull_sources, PullContext, write_spreadsheet
 from footnotes.text import Insertion
+
+async def track_tasks(job_context, lambda_context, futures, last_skip=0, deadline=10 * 1000):
+    total = len(futures)
+    pending = futures
+    while len(pending) > last_skip and lambda_context.get_remaining_time_in_millis() > deadline:
+        job_context.queue.send_message(MessageBody=json.dumps({
+            'message': 'progress',
+            'progress': total - len(pending),
+            'total': max(len(pending), total - last_skip),
+            'job_id': job_context.job_id,
+            'file_uuid': job_context.file_uuid,
+        }))
+        done, pending = await asyncio.wait(pending, timeout=0.2)
+
+    return pending
+
+class JobContext(object):
+    def __init__(self, event):
+        self.event = event
+
+        self.s3 = boto3.resource('s3')
+        self.sqs = boto3.resource('sqs')
+
+        s3_info = self.event['Records'][0]['s3']
+        bucket_name = s3_info['bucket']['name']
+        object_key = s3_info['object']['key']
+
+        self.bucket = self.s3.Bucket(bucket_name)
+        bucket_object = self.bucket.Object(object_key)
+        body = bucket_object.get()['Body']
+        self.metadata = bucket_object.metadata
+
+        self.queue_url = self.metadata['queue-url']
+        self.file_uuid = self.metadata['uuid']
+        self.job_id = self.metadata['job-id']
+        self.original_name = self.metadata['original-name']
+
+        if self.original_name.endswith('.docx'):
+            self.original_name = self.original_name[:-5]
+
+        self.queue = self.sqs.Queue(self.queue_url)
+
+        self.queue.send_message(MessageBody=json.dumps({
+            'message': 'start',
+            'job_id': self.job_id,
+            'file_uuid': self.file_uuid,
+        }))
+
+        self.stream = BytesIO(body.read())
+
+    def temp_path(self, extension):
+        return join(tempfile.gettempdir(), self.file_uuid + extension)
+
+    def upload_file(self, path, bucket_key, content_type):
+        print('Uploading file...')
+        out_bucket_name = os.getenv('RESULTS_BUCKET', 'autopull-results')
+        out_bucket = self.s3.Bucket(out_bucket_name)
+        out_bucket.upload_file(path, bucket_key, ExtraArgs={
+            'ACL': 'public-read',
+            'ContentType': content_type,
+        })
+
+        self.queue.send_message(MessageBody=json.dumps({
+            'message': 'complete',
+            'result_url': 'https://s3.amazonaws.com/{}/{}'.format(out_bucket_name, bucket_key),
+            'queue_url': self.queue_url,
+            'job_id': self.job_id,
+            'file_uuid': self.file_uuid,
+        }))
 
 # Upload from s3 triggers event.
 # Download s3 object into ram.
@@ -18,129 +87,55 @@ from footnotes.text import Insertion
 # Upload zipfile and xlsx to s3.
 async def pull_co(event, lambda_context):
     print(event)
-    s3 = boto3.resource('s3')
-    sqs = boto3.resource('sqs')
+    job_context = JobContext(event)
 
-    s3_info = event['Records'][0]['s3']
-    bucket_name = s3_info['bucket']['name']
-    object_key = s3_info['object']['key']
-
-    bucket = s3.Bucket(bucket_name)
-    bucket_object = bucket.Object(object_key)
-    body = bucket_object.get()['Body']
-
-    queue_url = bucket_object.metadata['queue-url']
-    file_uuid = bucket_object.metadata['uuid']
-    job_id = bucket_object.metadata['job-id']
-    original_name = bucket_object.metadata['original-name']
     pullers = None
-    if 'pullers' in bucket_object.metadata:
-        pullers_decoded = unquote(bucket_object.metadata['pullers']).splitlines()
+    if 'pullers' in job_context.metadata:
+        pullers_decoded = unquote(job_context.metadata['pullers']).splitlines()
         pullers = [p for p in pullers_decoded if p]
 
-    if original_name.endswith('.docx'):
-        original_name = original_name[:-5]
+    zipfile_path = job_context.temp_path('.zip')
+    spreadsheet_path = job_context.temp_path('.xlsx')
 
-    stream = BytesIO(body.read())
+    zipfile_name = 'Bookpull.{}'.format(job_context.original_name)
 
-    queue = sqs.Queue(queue_url)
-
-    zipfile_path = join(tempfile.gettempdir(), file_uuid + '.zip')
-    spreadsheet_path = join(tempfile.gettempdir(), file_uuid + '.xlsx')
-    queue.send_message(MessageBody=json.dumps({
-        'message': 'start',
-        'job_id': job_id,
-        'file_uuid': file_uuid,
-    }))
-
-    zipfile_name = 'Bookpull.{}'.format(original_name)
-
-    async with PullContext(stream, zipfile_path, zipfile_prefix=zipfile_name) as context:
+    async with PullContext(job_context.stream, zipfile_path, zipfile_prefix=zipfile_name) as context:
         downloads, pull_infos = pull_sources(context)
-        tasks = [asyncio.ensure_future(dl) for dl in downloads]
-        total = len(tasks)
-        pending = tasks
-        while len(pending) > 5 and lambda_context.get_remaining_time_in_millis() > 10 * 1000:
-            queue.send_message(MessageBody=json.dumps({
-                'message': 'progress',
-                'progress': total - len(pending),
-                'total': total,
-                'job_id': job_id,
-                'file_uuid': file_uuid,
-            }))
-            done, pending = await asyncio.wait(pending, timeout=0.2)
+        await track_tasks(job_context, lambda_context, downloads, last_skip=5)
 
         if pullers:
             add_pullers(pull_infos, pullers)
 
         write_spreadsheet(pull_infos, spreadsheet_path)
-        context.zipf.write(spreadsheet_path, '{}/0.Bookpull.{}.xlsx'.format(context.zipfile_prefix, original_name))
+        context.zipf.write(spreadsheet_path, '{}/0.Bookpull.{}.xlsx'.format(
+            context.zipfile_prefix,
+            job_context.original_name
+        ))
         os.remove(spreadsheet_path)
 
-    out_bucket = s3.Bucket('autopull-results')
-    print('Uploading zip...')
-    bucket_zipfile_path = 'pull/{}/{}.zip'.format(file_uuid, zipfile_name)
-    out_bucket.upload_file(zipfile_path, bucket_zipfile_path, ExtraArgs={
-        'ACL': 'public-read',
-        'ContentType': 'application/zip',
-    })
+    bucket_key = 'pull/{}/{}.zip'.format(job_context.file_uuid, zipfile_name)
+    job_context.upload_file(zipfile_path, bucket_key, 'application/zip')
     os.remove(zipfile_path)
-
-    queue.send_message(MessageBody=json.dumps({
-        'message': 'complete',
-        'result_url': 'https://s3.amazonaws.com/autopull-results/' + bucket_zipfile_path,
-        'queue_url': queue_url,
-        'job_id': job_id,
-        'file_uuid': file_uuid,
-    }))
 
 def pull(event, context):
     loop = asyncio.get_event_loop()
     loop.run_until_complete(pull_co(event, context))
 
-def perma(event, context):
+async def perma_co(event, lambda_context):
     print(event)
-    s3 = boto3.resource('s3')
-    sqs = boto3.resource('sqs')
+    job_context = JobContext(event)
 
-    s3_info = event['Records'][0]['s3']
-    bucket_name = s3_info['bucket']['name']
-    object_key = s3_info['object']['key']
+    out_path = job_context.temp_path('.docx')
 
-    bucket = s3.Bucket(bucket_name)
-    bucket_object = bucket.Object(object_key)
-    body = bucket_object.get()['Body']
-
-    queue_url = bucket_object.metadata['queue-url']
-    file_uuid = bucket_object.metadata['uuid']
-    original_name = bucket_object.metadata['original-name']
-    if original_name.endswith('.docx'):
-        original_name = original_name[:-5]
-
-    stream = BytesIO(body.read())
-
-    out_path = join(tempfile.gettempdir(), file_uuid + '.docx')
-
-    queue = sqs.Queue(queue_url)
-    queue.send_message(MessageBody=json.dumps({
-        'message': 'start',
-        'file_uuid': file_uuid,
-    }))
-
-    with Docx(stream) as docx:
+    with Docx(job_context.stream) as docx:
         footnotes = docx.footnote_list
+        urls = collect_urls(footnotes)
 
-        permas = {}
-        urls = list(collect_urls(footnotes))
-        for progress in make_permas_progress(urls, permas):
-            queue.send_message(MessageBody=json.dumps({
-                'message': 'progress',
-                'progress': progress['progress'],
-                'total': progress['total'],
-                'file_uuid': file_uuid,
-            }))
+        async with PermaContext() as perma_context:
+            futures = make_permas_futures(perma_context, urls)
+            await track_tasks(job_context, lambda_context, futures)
 
-        insertions = generate_insertions(urls, permas)
+            insertions = generate_insertions(urls, perma_context.permas)
 
         print('Applying insertions.')
         Insertion.apply_all(insertions)
@@ -150,17 +145,11 @@ def perma(event, context):
 
         docx.write(out_path)
 
-    out_bucket = s3.Bucket('autopull-results')
     print('Uploading docx...')
-    bucket_path = 'perma/{}/{}_perma.docx'.format(file_uuid, original_name)
-    out_bucket.upload_file(out_path, bucket_path, ExtraArgs={
-        'ACL': 'public-read',
-        'ContentType': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    })
+    bucket_key = 'perma/{}/{}_perma.docx'.format(job_context.file_uuid, job_context.original_name)
+    job_context.upload_file(out_path, bucket_key, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     os.remove(out_path)
 
-    queue.send_message(MessageBody=json.dumps({
-        'message': 'complete',
-        'file_uuid': file_uuid,
-        'result_url': 'https://s3.amazonaws.com/autopull-results/' + bucket_path,
-    }))
+def perma(event, context):
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(perma_co(event, context))

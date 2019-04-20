@@ -14,7 +14,7 @@ from .parsing import Parseable
 from .text import Insertion
 
 API_ENDPOINT = 'https://api.perma.cc/v1/archives/batches'
-API_CHUNK_SIZE = 10
+API_CHUNK_SIZE = 8
 
 class SyncSession(aiohttp.ClientSession):
     def __enter__(self):
@@ -38,7 +38,7 @@ async def make_permas_batch(session, urls, folder, result):
     params = { 'api_key': CONFIG['perma']['api_key'] }
 
     print('Starting batch of {}...'.format(len(urls)))
-    for _ in range(3):
+    try:
         async with session.post(API_ENDPOINT, params=params, json=data) as response:
             # print('Status: {}; content type: {}.'.format(response.status, response.content_type))
             if response.status == 201 and response.content_type == 'application/json':
@@ -49,31 +49,49 @@ async def make_permas_batch(session, urls, folder, result):
                         print(job['message'])
                     else:
                         result[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
+    except asyncio.TimeoutError:
+        if len(urls) >= 4:
+            print('Splitting...')
+            mid = len(urls) // 2
+            await asyncio.gather(
+                make_permas_batch(session, urls[:mid], folder, result),
+                make_permas_batch(session, urls[mid:], folder, result),
+            )
 
-                return
+def make_permas_futures(context, urls, folder=None):
+    url_strs_unfiltered = [url.normalized() for url in urls]
 
-        print('Retrying...')
-
-def make_permas_progress(urls, permas, folder=None):
-    url_strs = [url.normalized() for url in urls if '//perma.cc' not in url.normalized()]
+    # Perma is broken for washingtonpost.com for some reason!
+    url_strs = [url for url in url_strs_unfiltered if '//perma.cc' not in url and 'washingtonpost.com' not in url]
     print('Making permas for {} URLs.'.format(len(url_strs)))
 
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    connector = aiohttp.TCPConnector(ssl_context=ssl_context)
-    with SyncSession(connector=connector) as session:
-        if folder is None:
-            folder = CONFIG['perma']['folder_id']
+    if folder is None:
+        folder = CONFIG['perma']['folder_id']
 
-        batches = []
-        total_chunks = math.ceil(len(url_strs) / API_CHUNK_SIZE)
-        for idx, chunk in enumerate(chunks(url_strs, API_CHUNK_SIZE)):
-            run(make_permas_batch(session, chunk, folder, permas))
-            yield { 'progress': idx + 1, 'total': total_chunks }
+    return [make_permas_batch(context.session, chunk, folder, context.permas) for chunk in chunks(url_strs, API_CHUNK_SIZE)]
+
+class PermaContext(object):
+    def __init__(self, limit=5, timeout=20):
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl_context=ssl_context, limit=limit)
+        timeout_obj = aiohttp.ClientTimeout(total=timeout)
+        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout_obj)
+        self.permas = {}
+
+    async def __aenter__(self):
+        await self.session.__aenter__()
+        return self
+
+    async def __aexit__(self, *args):
+        return await self.session.__aexit__(*args)
+
+async def make_permas_co(urls, folder=None):
+    async with PermaContext() as context:
+        await asyncio.gather(*make_permas_futures(context, urls, folder))
+        return context.permas
 
 def make_permas(urls, folder=None):
-    permas = {}
-    [_ for _ in make_permas_progress(urls, permas, folder)]
-    return permas
+    return run(make_permas_co(urls, folder))
 
 def collect_urls(footnotes):
     for fn in footnotes:

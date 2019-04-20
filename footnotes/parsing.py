@@ -387,6 +387,8 @@ class CitationContext(object):
 
     CAPITAL_WORDS_RE = re.compile(r'[A-Z0-9][A-Za-z0-9]*[,:;.]? [A-Z0-9]')
 
+    DATE_PAREN_RE = re.compile(r'\((18|19|20)[0-9][0-9]\)')
+
     SOURCE_WORD = Parseable.SOURCE_WORD
     SHORT_CASE_RE = re.compile(r'([\.,]["”]? |^ ?|{signal} )[0-9]+ (?P<source>(& |{word} )*{word}) at ([0-9,]*[0-9])'.format(
         word=SOURCE_WORD, signal=SIGNAL
@@ -399,6 +401,9 @@ class CitationContext(object):
         text = normalize(str(citation).strip())
 
         if citation.citation():
+            return True
+
+        if 'on file with' in text:
             return True
 
         if '§' not in text:
@@ -424,12 +429,15 @@ class CitationContext(object):
         if not re.search(r'[0-9]', text):
             return False
 
-        # If there's an opening citation, it's definitely a citation.
+        # If there's an opening signal, it's definitely a citation.
         if CitationContext.OPENING_SIGNAL_RE.match(text):
             return True
 
         # Heuristic: if there are capital words that look like a title, this is a citation.
         if CitationContext.CAPITAL_WORDS_RE.search(text):
+            return True
+
+        if CitationContext.DATE_PAREN_RE.search(text):
             return True
 
         # If there is a link, it's a citation.
