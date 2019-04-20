@@ -1,14 +1,14 @@
 service: autopull
 
-# You can pin your service to only deploy with a specific Serverless version
-# Check out our docs for more details
-# frameworkVersion: "=X.X.X"
-
 provider:
   name: aws
   runtime: python3.6
-  timeout: 180
+  timeout: 240
   memorySize: 1024
+  environment:
+    STAGE: ${self:custom.stage}
+    RESULTS_BUCKET: autopull-results-${self:custom.stage}
+
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -20,8 +20,8 @@ provider:
         - s3:ListBucket
         - s3:GetObject
       Resource:
-        - arn:aws:s3:::autopull-uploads
-        - arn:aws:s3:::autopull-uploads/*
+        - arn:aws:s3:::autopull-uploads-${self:custom.stage}
+        - arn:aws:s3:::autopull-uploads-${self:custom.stage}/*
     - Effect: Allow
       Action:
         - s3:ListBucket
@@ -31,8 +31,8 @@ provider:
         - s3:ListBucketMultipartUploads
         - s3:ListMultipartUploadParts
       Resource:
-        - arn:aws:s3:::autopull-results
-        - arn:aws:s3:::autopull-results/*
+        - arn:aws:s3:::autopull-results-${self:custom.stage}
+        - arn:aws:s3:::autopull-results-${self:custom.stage}/*
     - Effect: Allow
       Action:
         - sqs:ListQueues
@@ -47,25 +47,15 @@ provider:
         - "*"
 
 resources:
-  Resources:
-    S3BucketAutopulluploads:
-      Type: AWS::S3::Bucket
-      Properties:
-        PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
-    S3BucketAutopullresults:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: autopull-results
-        PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
-
+  Outputs:
+    S3UploadsExport:
+      Export:
+        Name: S3Uploads-${self:custom.stage}
+      Value: autopull-uploads-${self:custom.stage}
+    S3ResultsExport:
+      Export:
+        Name: S3Results-${self:custom.stage}
+      Value: autopull-results-${self:custom.stage}
 
 # you can add packaging information here
 package:
@@ -76,13 +66,16 @@ package:
     - test/**
     - build/**
     - node_modules/**
-    - /*.docx
-    - /*.xlsx
-    - /*.pyc
+    - "**/*.docx"
+    - "**/*.xlsx"
+    - "**/*.pyc"
+    - "**/*.icns"
     - footnotes/*.pyc
     - footnotes/config_development.json
     - "**/__pycache__/**"
     - venv/**
+    - venv_package/**
+    - reporters-db/reporters_db/data/reporters.csv
   include:
     - /*.py
     - footnotes/*.py
@@ -95,7 +88,7 @@ functions:
     handler: handler.pull
     events:
       - s3:
-          bucket: autopull-uploads
+          bucket: autopull-uploads-${self:custom.stage}
           event: s3:ObjectCreated:*
           rules:
             - prefix: pull/
@@ -106,7 +99,7 @@ functions:
     handler: handler.perma
     events:
       - s3:
-          bucket: autopull-uploads
+          bucket: autopull-uploads-${self:custom.stage}
           event: s3:ObjectCreated:*
           rules:
             - prefix: perma/
@@ -123,3 +116,7 @@ layers:
     path: lxml_layer
     compatibleRuntimes:
       - python3.6
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  region: ${opt:region, self:provider.region}
