@@ -12,10 +12,10 @@ from footnotes.perma import collect_urls, generate_insertions, make_permas_futur
 from footnotes.pull import add_pullers, pull as pull_sources, PullContext, write_spreadsheet
 from footnotes.text import Insertion
 
-async def track_tasks(job_context, lambda_context, futures, last_skip=0, deadline=10 * 1000):
+async def track_tasks(job_context, futures, last_skip=0, check=lambda: True):
     total = len(futures)
     pending = futures
-    while len(pending) > last_skip and lambda_context.get_remaining_time_in_millis() > deadline:
+    while len(pending) > last_skip and check():
         job_context.queue.send_message(MessageBody=json.dumps({
             'message': 'progress',
             'progress': total - len(pending),
@@ -101,7 +101,10 @@ async def pull_co(event, lambda_context):
 
     async with PullContext(job_context.stream, zipfile_path, zipfile_prefix=zipfile_name) as context:
         downloads, pull_infos = pull_sources(context)
-        await track_tasks(job_context, lambda_context, downloads, last_skip=5)
+        def check():
+            return (lambda_context.get_remaining_time_in_millis() > 10 * 1000 and
+                    context.compressed_size() < 400 * 1024 * 1024)
+        await track_tasks(job_context, downloads, last_skip=5, check=check)
 
         if pullers:
             add_pullers(pull_infos, pullers)
@@ -133,7 +136,9 @@ async def perma_co(event, lambda_context):
 
         async with PermaContext() as perma_context:
             futures = make_permas_futures(perma_context, urls)
-            await track_tasks(job_context, lambda_context, futures)
+            def check():
+                return lambda_context.get_remaining_time_in_millis() > 10 * 1000
+            await track_tasks(job_context, futures, check=check)
 
             insertions = generate_insertions(urls, perma_context.permas)
 

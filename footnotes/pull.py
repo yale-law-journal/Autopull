@@ -1,6 +1,5 @@
 import aiohttp
 import asyncio
-import argparse
 import certifi
 from itertools import chain
 import json
@@ -8,7 +7,6 @@ import mimetypes
 from os.path import basename, dirname, join
 import re
 import ssl
-import string
 import sys
 from urllib.parse import urlencode
 import zipfile
@@ -317,6 +315,9 @@ class PullContext(object):
         if self.zipfile_path:
             self.zipf.close()
             await self.session.close()
+
+    def compressed_size(self):
+        return sum(zipinfo.compress_size for zipinfo in self.zipf.infolist()) if self.zipf else 0
 
 async def pull_local_co(filename, pull_sources=True):
     in_name = basename(filename)
