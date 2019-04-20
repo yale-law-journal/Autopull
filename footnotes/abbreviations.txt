@@ -2,6 +2,7 @@ Mr.
 Mrs.
 Ms.
 cf.
+Cf.
 e.g.
 Dept.
 REV.
