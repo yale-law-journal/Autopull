@@ -128,14 +128,17 @@ async def perma_co(event, lambda_context):
     print(event)
     job_context = JobContext(event)
 
+    perma_api_key = job_context.metadata.get('perma-api')
+    perma_folder = job_context.metadata.get('perma-folder')
+
     out_path = job_context.temp_path('.docx')
 
     with Docx(job_context.stream) as docx:
         footnotes = docx.footnote_list
         urls = collect_urls(footnotes)
 
-        async with PermaContext() as perma_context:
-            futures = make_permas_futures(perma_context, urls)
+        async with PermaContext(urls, api_key=perma_api_key, folder=perma_folder) as perma_context:
+            futures = make_permas_futures(perma_context)
             def check():
                 return lambda_context.get_remaining_time_in_millis() > 10 * 1000
             await track_tasks(job_context, futures, check=check)

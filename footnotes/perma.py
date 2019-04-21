@@ -1,12 +1,8 @@
 import aiohttp
 import asyncio
 import certifi
-import json
-import math
-from os.path import dirname, join
 import re
 import ssl
-import sys
 
 from .config import CONFIG
 from .footnotes import Docx
@@ -33,13 +29,13 @@ def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
-async def make_permas_batch(session, urls, folder, result):
-    data = { 'urls': urls, 'target_folder': folder }
-    params = { 'api_key': CONFIG['perma']['api_key'] }
+async def make_permas_batch(context, urls):
+    data = { 'urls': urls, 'target_folder': context.folder }
+    params = { 'api_key': context.api_key }
 
     print('Starting batch of {}...'.format(len(urls)))
     try:
-        async with session.post(API_ENDPOINT, params=params, json=data) as response:
+        async with context.session.post(API_ENDPOINT, params=params, json=data) as response:
             # print('Status: {}; content type: {}.'.format(response.status, response.content_type))
             if response.status == 201 and response.content_type == 'application/json':
                 batch = await response.json()
@@ -48,30 +44,39 @@ async def make_permas_batch(session, urls, folder, result):
                     if job['guid'] is None:
                         print(job['message'])
                     else:
-                        result[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
+                        context.permas[job['submitted_url']] = 'https://perma.cc/{}'.format(job['guid'])
     except asyncio.TimeoutError:
         if len(urls) >= 4:
             print('Splitting...')
             mid = len(urls) // 2
             await asyncio.gather(
-                make_permas_batch(session, urls[:mid], folder, result),
-                make_permas_batch(session, urls[mid:], folder, result),
+                make_permas_batch(context, urls[:mid]),
+                make_permas_batch(context, urls[mid:]),
             )
 
-def make_permas_futures(context, urls, folder=None):
-    url_strs_unfiltered = [url.normalized() for url in urls]
+def make_permas_futures(context):
+    url_strs_unfiltered = [url.normalized() for url in context.all_urls]
 
     # Perma is broken for washingtonpost.com for some reason!
     url_strs = [url for url in url_strs_unfiltered if '//perma.cc' not in url and 'washingtonpost.com' not in url]
     print('Making permas for {} URLs.'.format(len(url_strs)))
 
-    if folder is None:
-        folder = CONFIG['perma']['folder_id']
-
-    return [make_permas_batch(context.session, chunk, folder, context.permas) for chunk in chunks(url_strs, API_CHUNK_SIZE)]
+    return [make_permas_batch(context, chunk) for chunk in chunks(url_strs, API_CHUNK_SIZE)]
 
 class PermaContext(object):
-    def __init__(self, limit=5, timeout=20):
+    def __init__(self, all_urls, api_key=None, folder=None, limit=5, timeout=20):
+        if folder is None:
+            print('No folder supplied!')
+            folder = CONFIG['perma']['folder_id']
+
+        if api_key is None:
+            print('No API key supplied!')
+            api_key = CONFIG['perma']['api_key']
+
+        self.all_urls = all_urls
+        self.api_key = api_key
+        self.folder = folder
+
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl_context=ssl_context, limit=limit)
         timeout_obj = aiohttp.ClientTimeout(total=timeout)
@@ -85,13 +90,13 @@ class PermaContext(object):
     async def __aexit__(self, *args):
         return await self.session.__aexit__(*args)
 
-async def make_permas_co(urls, folder=None):
-    async with PermaContext() as context:
-        await asyncio.gather(*make_permas_futures(context, urls, folder))
+async def make_permas_co(urls, api_key, folder):
+    async with PermaContext(urls, api_key=api_key, folder=folder) as context:
+        await asyncio.gather(*make_permas_futures(context))
         return context.permas
 
-def make_permas(urls, folder=None):
-    return run(make_permas_co(urls, folder))
+def make_permas(urls, api_key=None, folder=None):
+    return run(make_permas_co(urls, api_key, folder))
 
 def collect_urls(footnotes):
     for fn in footnotes:
