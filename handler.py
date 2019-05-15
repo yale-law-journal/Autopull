@@ -135,7 +135,7 @@ async def perma_co(event, lambda_context):
 
     with Docx(job_context.stream) as docx:
         footnotes = docx.footnote_list
-        urls = collect_urls(footnotes)
+        urls = list(collect_urls(footnotes))
 
         async with PermaContext(urls, api_key=perma_api_key, folder=perma_folder) as perma_context:
             futures = make_permas_futures(perma_context)
