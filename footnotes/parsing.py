@@ -174,9 +174,9 @@ class Parseable(object):
             result = []
             for t in tokens:
                 last_index = t.i
-                for match in re.finditer(r'\) [A-Z]', str(self[t.slice()])):
-                    yield Range(last_index, match.end() - 2)
-                    last_index = match.end() - 1
+                for match in re.finditer(r'\)\.? [A-Z]', str(self[t.slice()])):
+                    yield Range(last_index, t.i + match.end() - 2)
+                    last_index = t.i + match.end() - 1
                 yield Range(last_index, t.j)
 
         second_pass = paren_cap(first_pass)
