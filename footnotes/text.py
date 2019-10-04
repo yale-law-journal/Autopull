@@ -68,7 +68,7 @@ class Insertion(object):
         )
 
     def _fulltext(self):
-        return self.element.text if self.location == Location.TEXT else self.element.tail
+        return (self.element.text or '') if self.location == Location.TEXT else (self.element.tail or '')
 
     def _set_fulltext(self, s):
         if self.location == Location.TEXT:
@@ -104,14 +104,14 @@ class TextRef(object):
 
     @staticmethod
     def from_text(self, element):
-        return TextRef(element, Location.TEXT, Range(0, len(element.text)))
+        return TextRef(element, Location.TEXT, Range(0, len(element.text or '')))
 
     @staticmethod
     def from_tail(self, element):
-        return TextRef(element, Location.TAIL, Range(0, len(element.tail)))
+        return TextRef(element, Location.TAIL, Range(0, len(element.tail or '')))
 
     def fulltext(self):
-        return self.element.text if self.location == Location.TEXT else self.element.tail
+        return (self.element.text or '') if self.location == Location.TEXT else (self.element.tail or '')
 
     def __str__(self):
         return self.fulltext()[self.range.slice()]

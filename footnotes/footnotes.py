@@ -39,11 +39,11 @@ class Run(object):
         """Unformatted text for run."""
 
         text_elem = self.element.findall('.//w:t', NS)
-        return text_elem[0].text if text_elem else ''
+        return (text_elem[0].text or '') if text_elem else ''
 
     def text_refs(self):
         text_elems = self.element.findall('.//w:t', NS)
-        return [TextRef(te, Location.TEXT, Range.from_str(te.text)) for te in text_elems]
+        return [TextRef(te, Location.TEXT, Range.from_str(te.text or '')) for te in text_elems]
 
 class Paragraph(object):
     """Represents a <w:r> element, a paragraph."""
