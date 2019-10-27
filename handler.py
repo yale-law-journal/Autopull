@@ -6,6 +6,7 @@ import os
 from os.path import join
 import tempfile
 from urllib.parse import unquote
+import random
 
 from footnotes.footnotes import Docx
 from footnotes.perma import collect_urls, generate_insertions, make_permas_futures, PermaContext
@@ -93,6 +94,7 @@ async def pull_co(event, lambda_context):
     if 'pullers' in job_context.metadata:
         pullers_decoded = unquote(job_context.metadata['pullers']).splitlines()
         pullers = [p for p in pullers_decoded if p]
+        random.shuffle(pullers)
 
     zipfile_path = job_context.temp_path('.zip')
     spreadsheet_path = job_context.temp_path('.xlsx')
