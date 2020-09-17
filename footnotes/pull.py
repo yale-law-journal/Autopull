@@ -199,13 +199,14 @@ def pull(context):
                         )
 
                 if pull_info.citation_type == 'Administrative':
-                    re_match = re.match(r'(?P<volume>[0-9]+) (F\. ?R\.|Fed\. ?Reg\.) (?P<page>[0-9,]+)', citation_text)
-                    volume = int(re_match.group('volume'))
-                    page = int(re_match.group('page').replace(',', ''))
-                    pull_info.human_link = 'https://www.govinfo.gov/link/fr/{}/{}?{}'.format(volume, page, urlencode({
-                        'link-type': 'pdf',
-                    }))
-                    pull_info.download_link = pull_info.human_link
+                    re_match = re.match(r'(?P<volume>[0-9]+) (F\. ?R\.|Fed\. ?Reg\.) §? ?(?P<page>[0-9,]+)', citation_text)
+                    if re_match:
+                        volume = int(re_match.group('volume'))
+                        page = int(re_match.group('page').replace(',', ''))
+                        pull_info.human_link = 'https://www.govinfo.gov/link/fr/{}/{}?{}'.format(volume, page, urlencode({
+                            'link-type': 'pdf',
+                        }))
+                        pull_info.download_link = pull_info.human_link
 
                 if pull_info.citation_type == 'Case' and not pull_info.human_link:
                     pull_info.human_link = 'https://1.next.westlaw.com/Search/Results.html?{}'.format(urlencode({
