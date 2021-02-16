@@ -11,6 +11,11 @@ BookpullSources.*
 /node_modules
 /.serverless
 /package-lock.json
+/deps/
+/lxml_layer/
+/apps/
+/.vscode/
+/test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

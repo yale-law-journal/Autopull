@@ -103,11 +103,11 @@ class TextRef(object):
         self.range = range
 
     @staticmethod
-    def from_text(self, element):
+    def from_text(element):
         return TextRef(element, Location.TEXT, Range(0, len(element.text or '')))
 
     @staticmethod
-    def from_tail(self, element):
+    def from_tail(element):
         return TextRef(element, Location.TAIL, Range(0, len(element.tail or '')))
 
     def fulltext(self):

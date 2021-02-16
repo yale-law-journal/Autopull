@@ -62,7 +62,7 @@ class Parseable(object):
         self.text_refs = text_refs
 
     @staticmethod
-    def from_element(self, element):
+    def from_element(element):
         def gather_refs(parent):
             for child in root:
                 if len(child.text) > 0:
@@ -368,14 +368,17 @@ class Citation(object):
     def __repr__(self):
         return 'Citation({!r})'.format(self.citation)
 
-    def find_title(self):
+    def find_title(self, extend_front=True):
         pre_citation = normalize(str(self.full)[:self.citation_range.i])
         match = Citation.TITLE_RE.search(pre_citation)
         if not match: return None
 
         title_range = Range.from_match(match, 'title')
         title = self.full[title_range.slice()]
-        return extend_front_if_formatted(title)
+
+        if extend_front:
+            return extend_front_if_formatted(title)
+        return title
 
 class CitationContext(object):
     SIGNAL = Parseable.SIGNAL

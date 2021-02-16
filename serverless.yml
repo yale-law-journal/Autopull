@@ -2,12 +2,12 @@ service: autopull
 
 provider:
   name: aws
-  runtime: python3.6
-  timeout: 240
+  runtime: python3.7
+  timeout: 360
   memorySize: 1024
   environment:
     STAGE: ${self:custom.stage}
-    RESULTS_BUCKET: autopull-results-${self:custom.stage}
+    RESULTS_BUCKET: journal-tools-autopull-results-${self:custom.stage}
 
   iamRoleStatements:
     - Effect: Allow
@@ -20,8 +20,8 @@ provider:
         - s3:ListBucket
         - s3:GetObject
       Resource:
-        - arn:aws:s3:::autopull-uploads-${self:custom.stage}
-        - arn:aws:s3:::autopull-uploads-${self:custom.stage}/*
+        - arn:aws:s3:::journal-tools-autopull-uploads-${self:custom.stage}
+        - arn:aws:s3:::journal-tools-autopull-uploads-${self:custom.stage}/*
     - Effect: Allow
       Action:
         - s3:ListBucket
@@ -31,8 +31,8 @@ provider:
         - s3:ListBucketMultipartUploads
         - s3:ListMultipartUploadParts
       Resource:
-        - arn:aws:s3:::autopull-results-${self:custom.stage}
-        - arn:aws:s3:::autopull-results-${self:custom.stage}/*
+        - arn:aws:s3:::journal-tools-autopull-results-${self:custom.stage}
+        - arn:aws:s3:::journal-tools-autopull-results-${self:custom.stage}/*
     - Effect: Allow
       Action:
         - sqs:ListQueues
@@ -51,11 +51,11 @@ resources:
     S3UploadsExport:
       Export:
         Name: S3Uploads-${self:custom.stage}
-      Value: autopull-uploads-${self:custom.stage}
+      Value: journal-tools-autopull-uploads-${self:custom.stage}
     S3ResultsExport:
       Export:
         Name: S3Results-${self:custom.stage}
-      Value: autopull-results-${self:custom.stage}
+      Value: journal-tools-autopull-results-${self:custom.stage}
 
 # you can add packaging information here
 package:
@@ -89,34 +89,45 @@ functions:
     handler: handler.pull
     events:
       - s3:
-          bucket: autopull-uploads-${self:custom.stage}
+          bucket: journal-tools-autopull-uploads-${self:custom.stage}
           event: s3:ObjectCreated:*
           rules:
             - prefix: pull/
     layers:
-      - Ref: DepsLambdaLayer
+      - Ref: AutopullDepsLambdaLayer
       - Ref: LxmlLambdaLayer
   applyPermaLinks:
     handler: handler.perma
     events:
       - s3:
-          bucket: autopull-uploads-${self:custom.stage}
+          bucket: journal-tools-autopull-uploads-${self:custom.stage}
           event: s3:ObjectCreated:*
           rules:
             - prefix: perma/
     layers:
-      - Ref: DepsLambdaLayer
+      - Ref: AutopullDepsLambdaLayer
+      - Ref: LxmlLambdaLayer
+  bluebook:
+    handler: handler.bluebook
+    events:
+      - s3:
+          bucket: journal-tools-autopull-uploads-${self:custom.stage}
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: bluebook/
+    layers:
+      - Ref: AutopullDepsLambdaLayer
       - Ref: LxmlLambdaLayer
 
 layers:
-  deps:
+  autopullDeps:
     path: deps
     compatibleRuntimes:
-      - python3.6
+      - python3.7
   lxml:
     path: lxml_layer
     compatibleRuntimes:
-      - python3.6
+      - python3.7
 
 custom:
   stage: ${opt:stage, self:provider.stage}

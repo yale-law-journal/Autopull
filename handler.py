@@ -13,6 +13,8 @@ from footnotes.perma import collect_urls, generate_insertions, make_permas_futur
 from footnotes.pull import add_pullers, pull as pull_sources, PullContext, write_spreadsheet
 from footnotes.text import Insertion
 
+from bluebook.highlight_doc import highlight_doc
+
 async def track_tasks(job_context, futures, last_skip=0, check=lambda: True):
     total = len(futures)
     pending = futures
@@ -66,8 +68,10 @@ class JobContext(object):
         return join(tempfile.gettempdir(), self.file_uuid + extension)
 
     def upload_file(self, path, bucket_key, content_type):
-        print('Uploading file...')
         out_bucket_name = os.getenv('RESULTS_BUCKET', 'autopull-results')
+        result_url = 'https://s3.amazonaws.com/{}/{}'.format(out_bucket_name, bucket_key)
+        print('Uploading file to {}...'.format(result_url))
+
         out_bucket = self.s3.Bucket(out_bucket_name)
         out_bucket.upload_file(path, bucket_key, ExtraArgs={
             'ACL': 'public-read',
@@ -76,7 +80,7 @@ class JobContext(object):
 
         self.queue.send_message(MessageBody=json.dumps({
             'message': 'complete',
-            'result_url': 'https://s3.amazonaws.com/{}/{}'.format(out_bucket_name, bucket_key),
+            'result_url': result_url,
             'queue_url': self.queue_url,
             'job_id': self.job_id,
             'file_uuid': self.file_uuid,
@@ -163,3 +167,26 @@ async def perma_co(event, lambda_context):
 def perma(event, context):
     loop = asyncio.get_event_loop()
     loop.run_until_complete(perma_co(event, context))
+
+
+async def bluebook_co(event, lambda_context):
+    print(event)
+    job_context = JobContext(event)
+
+    out_path = job_context.temp_path('.json')
+
+    result = highlight_doc(job_context.stream)
+    result["file"] = job_context.original_name
+
+    f = open(out_path, 'w')
+    f.write(json.dumps(result))
+    f.close()
+
+    print('Uploading json...')
+    bucket_key = 'bluebook/{}/{}_bluebook.json'.format(job_context.file_uuid, job_context.original_name)
+    job_context.upload_file(out_path, bucket_key, 'application/json')
+    os.remove(out_path)
+
+def bluebook(event, context):
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(bluebook_co(event, context))

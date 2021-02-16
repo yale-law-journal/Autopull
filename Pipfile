@@ -1,0 +1,19 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+aiohttp = ">=3.5.4"
+lxml = ">=4.3.2"
+certifi = ">=2019.3.9"
+boto3 = ">=1.9.125"
+colorama = ">=0.4.3"
+nltk = ">=3.5"
+XlsxWriter = ">=1.1.5"
+regex = "*"
+
+[requires]
+python_version = "3.7"
